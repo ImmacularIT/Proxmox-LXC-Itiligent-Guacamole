@@ -59,6 +59,13 @@ s = re.sub(
     flags=re.M,
 )
 
+# The upstream Ctrl+Z instruction is unsafe and misleading while running under
+# the Proxmox container builder. The feature prompts themselves are preserved.
+s = s.replace(
+    'echo -e "${LYELLOW}Ctrl+Z now to exit now if you wish to customise 1-setup.sh options or create an unattended install."',
+    'echo -e "${LYELLOW}Interactive configuration follows. Complete each prompt to continue.${GREY}"',
+)
+
 # Proxmox owns hostname, hosts entries, DNS and resolv.conf.
 identity = r'''# Proxmox adaptation: retain container identity and network configuration.
 SERVER_NAME="${SERVER_NAME:-$(hostname -s)}"
@@ -133,11 +140,19 @@ PY
 chmod 700 "$SETUP_SCRIPT"
 msg_ok "Adapted Itiligent installer for Proxmox LXC"
 
-# Retain upstream Debian 13 behavior and menus. The parent and all downloaded
-# child scripts have only their Proxmox-incompatible assumptions patched.
-msg_info "Starting Itiligent Guacamole setup"
+# Do not wrap the interactive upstream menu in msg_info. msg_info starts the
+# Community Scripts spinner, which redraws the same terminal line and hides the
+# prompts. The installer remains attached to the active terminal instead.
+echo
+echo -e "${INFO}${YW}Starting interactive Itiligent Guacamole configuration.${CL}"
+echo -e "${INFO}${YW}Answer each prompt below; password input will not be echoed.${CL}"
+echo
 cd /root
-bash "$SETUP_SCRIPT"
+if [[ -r /dev/tty ]]; then
+  bash "$SETUP_SCRIPT" </dev/tty
+else
+  bash "$SETUP_SCRIPT"
+fi
 msg_ok "Itiligent Guacamole setup completed"
 
 printf '%s\n' "$UPSTREAM_COMMIT" >/etc/itiligent-guacamole-upstream-commit
