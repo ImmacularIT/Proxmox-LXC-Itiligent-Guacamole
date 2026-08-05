@@ -37,6 +37,8 @@ The core installation path has been successfully tested on Proxmox VE 9.2.6 usin
 
 The optional Itiligent choices remain available and should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, protocol connectivity, backups, and upgrades.
 
+For the complete implementation history, known quirks, test matrix, upstream-update process, and future maintenance workflow, see [Project Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
+
 ## Direct installation
 
 Run this command as `root` in the Proxmox host shell:
@@ -49,9 +51,9 @@ Select **Advanced Install** in the first menu to configure bridge, VLAN, DHCP or
 
 The container setup is followed by the original interactive Itiligent configuration menus.
 
-## PVE Scripts Management
+## PVE Scripts Management status
 
-This repository includes the metadata and conventional paths required by PVE Scripts Management:
+This repository includes Community-style metadata and conventional paths:
 
 ```text
 json/itiligent-guacamole.json
@@ -59,15 +61,9 @@ ct/itiligent-guacamole.sh
 install/itiligent-guacamole-install.sh
 ```
 
-Add the following repository URL in **Settings → Repositories**:
+Testing against the current PVE Scripts Management/ProxmoxVE-Local flow showed that custom repository entries are not synchronized into the active PocketBase-backed Available Scripts catalogue. Adding this repository therefore does **not currently make Itiligent Guacamole appear in search**, even though the metadata and paths are valid.
 
-```text
-https://github.com/ImmacularIT/Proxmox-Itiligent-Guacamole
-```
-
-Leave the repository enabled and run a metadata synchronization. **Itiligent Guacamole** should then appear as an installable CT script.
-
-The management application uses the repository's `main` branch. Its global repository branch setting should remain `main`.
+Use the direct installation command above. Retest custom-repository support only after a newer PVE Scripts Management release documents and implements end-to-end repository synchronization, catalogue merging, and custom script downloads.
 
 ## Access
 
