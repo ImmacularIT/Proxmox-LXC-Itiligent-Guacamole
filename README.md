@@ -31,40 +31,70 @@ The upstream Itiligent suite is pinned to commit `676eb7e2711dabdf7f33fa7fe91eaf
 
 No additional Guacamole functions are introduced by this project.
 
-## Development status
+## Validation status
 
-The current branch is an initial implementation. It requires installation and functional testing on a disposable Proxmox VE 9.2.6 host before production use.
+The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
 
-## Running while the repository is private
+The optional Itiligent choices remain available and should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, protocol connectivity, backups, and upgrades.
 
-The launcher uses the Community Scripts container builder and loads this repository's installer. Export a fine-grained GitHub token with read access to this repository before running it:
+## Direct installation
+
+Run this command as `root` in the Proxmox host shell:
 
 ```bash
-export GITHUB_TOKEN='github_pat_...'
-export ITILIGENT_REPO_REF='agent/proxmox-lxc-adaptation'
-bash ct/itiligent-guacamole.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-Do not store the token in the repository or shell history. When the repository becomes public, the token will no longer be needed.
+Select **Advanced Install** in the first menu to configure bridge, VLAN, DHCP or static IPv4, IPv6, and other container properties.
 
-## Expected installation flow
+The container setup is followed by the original interactive Itiligent configuration menus.
 
-The Proxmox launcher creates an unprivileged Debian 13 LXC. Inside the container, the installer downloads the pinned Itiligent suite, applies the compatibility changes, and starts the original Itiligent setup menus.
+## PVE Scripts Management
 
-The Itiligent menus continue to control database, authentication extensions, optional extras, Nginx, self-signed TLS, and Let's Encrypt.
+This repository includes the metadata and conventional paths required by PVE Scripts Management:
 
-## Validation checklist
+```text
+json/itiligent-guacamole.json
+ct/itiligent-guacamole.sh
+install/itiligent-guacamole-install.sh
+```
 
-1. Create an unprivileged Debian 13 container on Proxmox VE 9.2.6.
-2. Complete a local-database install with native Tomcat access.
-3. Verify login and immediately change the default `guacadmin` password.
-4. Test RDP, SSH, and VNC connections.
-5. Repeat with Nginx HTTP.
-6. Test self-signed TLS.
-7. Test Let's Encrypt using valid public DNS and reachable ports 80 and 443.
-8. Test TOTP, Duo, LDAP, Quick Connect, and History Recording independently.
-9. Verify the database backup cron job.
-10. Snapshot the container and test the existing Itiligent upgrade helper.
+Add the following repository URL in **Settings → Repositories**:
+
+```text
+https://github.com/ImmacularIT/Proxmox-Itiligent-Guacamole
+```
+
+Leave the repository enabled and run a metadata synchronization. **Itiligent Guacamole** should then appear as an installable CT script.
+
+The management application uses the repository's `main` branch. Its global repository branch setting should remain `main`.
+
+## Access
+
+Native Guacamole access remains available at:
+
+```text
+http://CONTAINER-IP:8080/guacamole
+```
+
+The initial upstream credentials are:
+
+```text
+Username: guacadmin
+Password: guacadmin
+```
+
+Change the password immediately after the first login. Nginx and TLS choices may provide a different preferred frontend URL while native port 8080 remains the fallback.
+
+## Suggested functional checks
+
+1. Verify RDP, SSH, and VNC connections.
+2. Test Nginx HTTP.
+3. Test self-signed TLS.
+4. Test Let's Encrypt using valid public DNS and reachable ports 80 and 443.
+5. Test TOTP, Duo, LDAP, Quick Connect, and History Recording independently.
+6. Verify the database backup cron job.
+7. Snapshot the container and test the existing Itiligent upgrade helper.
 
 ## Attribution
 

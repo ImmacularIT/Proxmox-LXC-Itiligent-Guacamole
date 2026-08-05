@@ -16,7 +16,7 @@ var_unprivileged="${var_unprivileged:-1}"
 
 PROJECT_OWNER="ImmacularIT"
 PROJECT_REPO="Proxmox-Itiligent-Guacamole"
-PROJECT_REF="${ITILIGENT_REPO_REF:-agent/proxmox-lxc-adaptation}"
+PROJECT_REF="${ITILIGENT_REPO_REF:-main}"
 
 header_info "$APP"
 variables

@@ -1,4 +1,4 @@
-name: Shell syntax
+name: Repository validation
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  bash-syntax:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,3 +16,35 @@ jobs:
         run: |
           bash -n ct/itiligent-guacamole.sh
           bash -n install/itiligent-guacamole-install.sh
+      - name: Validate PVE Scripts Management metadata and paths
+        run: |
+          python3 -m json.tool json/itiligent-guacamole.json >/dev/null
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          metadata_path = Path("json/itiligent-guacamole.json")
+          metadata = json.loads(metadata_path.read_text())
+
+          required = {
+              "name",
+              "slug",
+              "type",
+              "updateable",
+              "privileged",
+              "interface_port",
+              "description",
+              "install_methods",
+          }
+          missing = sorted(required - metadata.keys())
+          assert not missing, f"Missing metadata fields: {missing}"
+          assert metadata["slug"] == "itiligent-guacamole"
+          assert metadata["type"] == "ct"
+
+          for method in metadata["install_methods"]:
+              script = Path(method["script"])
+              assert script.is_file(), f"Missing launcher: {script}"
+
+          install_script = Path("install") / f'{metadata["slug"]}-install.sh'
+          assert install_script.is_file(), f"Missing installer: {install_script}"
+          PY
