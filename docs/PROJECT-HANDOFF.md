@@ -1,30 +1,19 @@
-# Project Handoff and Maintenance Workflow
+# Project Technical Handoff and Maintenance Workflow
 
-This document is the durable technical handoff for `ImmacularIT/Proxmox-Itiligent-Guacamole`.
-
-It records the implementation, decisions, test results, known limitations, failures encountered, and the workflow to follow when enhancing the project or adapting it to a newer Itiligent release.
+This document records the implementation, design decisions, test results, known limitations, failures encountered, and maintenance workflow for `ImmacularIT/Proxmox-Itiligent-Guacamole`.
 
 **Status snapshot:** 2026-08-05  
 **Production branch:** `main`  
-**Snapshot HEAD:** `6d4134d7cbc1a04fe3c6e9abcd64eee349e5250b`  
 **Test platform:** Proxmox VE 9.2.6, unprivileged Debian 13 LXC  
 **Pinned Itiligent revision:** `676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce`
 
-The branch name and HEAD will change over time. Always verify the current repository state before making new changes.
-
-## Future-chat bootstrap
-
-Attach this document or give the next assistant the repository URL and use a prompt similar to:
-
-> Read `docs/PROJECT-HANDOFF.md` in `ImmacularIT/Proxmox-Itiligent-Guacamole` before changing anything. Work from the current `main` branch, verify the current Community Scripts builder and the latest Itiligent source, preserve the Proxmox ownership boundaries documented here, and update this handoff when the work is complete.
-
-The assistant should not rely only on the snapshot SHA above. It should inspect the current files, recent commits, open pull requests, and current upstream sources.
+Always inspect the current repository state and upstream sources before making changes. The branch history, Community Scripts framework, and Itiligent source may have changed since this snapshot.
 
 ## Executive summary
 
 This project adapts the Itiligent Easy Guacamole Installer to a Community Scripts-style Proxmox LXC installation.
 
-The adaptation does not reimplement Guacamole. It downloads a pinned Itiligent installer at runtime and applies deterministic compatibility transformations so it can run inside a Proxmox-managed LXC where installation occurs as `root`.
+The adaptation does not reimplement Apache Guacamole. It downloads a pinned Itiligent installer at runtime and applies deterministic compatibility transformations so the suite can run inside a Proxmox-managed LXC where installation occurs as `root`.
 
 The tested production installation method is:
 
@@ -55,7 +44,7 @@ The following boundaries are intentional:
 - Firewall policy is managed by Proxmox and the surrounding network, not by UFW inside the container.
 - Installation runs as `root`, which is the normal Community Scripts container-installation model.
 - Itiligent application, backup, and upgrade files use root-owned appliance paths.
-- The upstream source is pinned to a commit for reproducibility.
+- The upstream Itiligent source is pinned to a commit for reproducibility.
 - No credentials or access tokens are committed.
 
 ## Repository layout
@@ -71,9 +60,7 @@ install/itiligent-guacamole-install.sh
     Runs inside the container. Downloads and patches the pinned Itiligent suite.
 
 json/itiligent-guacamole.json
-    Metadata prepared for PVE Scripts Management and Community-style discovery.
-    The current PVE Scripts Management custom-repository integration limitation is
-    documented later in this file.
+    Community-style metadata and installation path definitions.
 
 README.md
     User-facing project overview and direct installation instructions.
@@ -109,19 +96,17 @@ It performs the following work:
 
 ### Why the `curl` interception exists
 
-The Community Scripts builder normally calculates an installer URL inside the official `community-scripts/ProxmoxVE` repository. This project lives in a separate repository, so the launcher intercepts only that exact installer URL and substitutes the project installer URL.
+The Community Scripts builder normally calculates an installer URL inside the official `community-scripts/ProxmoxVE` repository. This project lives in a separate repository, so the launcher intercepts only that exact installer URL and substitutes this project's installer URL.
 
-This is a compatibility bridge, not an ideal permanent architecture.
-
-It depends on the current Community Scripts implementation continuing to:
+This is a compatibility bridge and depends on the current Community Scripts implementation continuing to:
 
 - fetch the installer with `curl`;
 - request the expected official raw URL;
 - perform that request after the wrapper has been defined.
 
-If `build.func` changes its download client, URL format, variable naming, or execution order, the interception may stop working. A future update must inspect the current `build.func` before assuming this mechanism still works.
+If `build.func` changes its download client, URL format, variable naming, or execution order, the interception may stop working. Every maintenance cycle should inspect the current `build.func` before assuming this mechanism remains valid.
 
-The Community Scripts framework itself is loaded from its moving `main` branch. Therefore, only the Itiligent source is pinned; the outer container builder is not fully reproducible.
+The Community Scripts framework is loaded from its moving `main` branch. Therefore, the Itiligent source is pinned, but the outer container builder is not fully reproducible.
 
 ### 2. Container-side installer
 
@@ -152,23 +137,23 @@ Both are set to mode `0700`.
 
 ### 3. Pinned upstream download
 
-The adapter downloads only `1-setup.sh` initially from the pinned upstream commit:
+The adapter initially downloads `1-setup.sh` from the pinned upstream commit:
 
 ```text
 676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce
 ```
 
-The local temporary path is:
+The temporary local path is:
 
 ```text
 /root/1-setup.sh
 ```
 
-The downloaded parent script is then transformed with an embedded Python program before it is executed.
+The downloaded parent script is transformed with an embedded Python program before execution.
 
 ## Exact upstream transformations
 
-The Python transformation is the core of the adaptation. It modifies the downloaded upstream script in memory and writes the result back to `/root/1-setup.sh`.
+The Python transformation is the core of the adaptation. It modifies the downloaded upstream script and writes the result back to `/root/1-setup.sh`.
 
 ### Root execution
 
@@ -303,9 +288,7 @@ else
 fi
 ```
 
-This preserved the original interactive menus and made the prompts visible.
-
-The subsequent installation completed successfully.
+This preserved the original interactive menus and made the prompts visible. The subsequent installation completed successfully.
 
 ## Network-selection behavior
 
@@ -327,11 +310,11 @@ With **Advanced Install**, the user can configure:
 
 For a VLAN-aware trunk, select the appropriate bridge and enter the VLAN tag. If a bridge is already an untagged/access connection to the target network, do not also set a VLAN tag.
 
-No custom networking code was added to this project because the existing Community Scripts builder already owns that function.
+No custom networking code was added because the existing Community Scripts builder already owns that function.
 
 ## Metadata and CI work
 
-### PVE Scripts Management metadata
+### Metadata
 
 `json/itiligent-guacamole.json` was added with:
 
@@ -371,7 +354,7 @@ The workflow does **not** currently:
 
 Adding a deterministic transformation test is a high-value future enhancement.
 
-## PVE Scripts Management custom-repository finding
+## PVE Scripts Management interoperability finding
 
 The metadata was created because PVE Scripts Management exposes a custom repository setting. Testing showed that adding this repository did not make the script appear after synchronization.
 
@@ -390,9 +373,9 @@ Source review of PVE Scripts Management/ProxmoxVE-Local version 1.1.8 showed an 
 - the active download routes require a PocketBase script record;
 - lower-level local JSON code exists but is not connected end-to-end to custom repository synchronization and selection.
 
-Therefore, the current supported installation method is the direct host command. The JSON metadata is retained for possible future PVE Scripts Management support or Community Scripts integration.
+Therefore, the currently tested installation method is the direct host command. The JSON metadata is retained for future interoperability testing.
 
-Do not tell users that adding this repository to PVE Scripts Management will currently make the card appear unless that behavior has been retested against a newer application version.
+Do not document custom-repository installation as working unless the full synchronization, catalogue, and download flow has been retested against the installed PVE Scripts Management version.
 
 ## Test matrix
 
@@ -422,7 +405,7 @@ Do not tell users that adding this repository to PVE Scripts Management will cur
 | Backup cron/helper | Not tested | Pending. |
 | Upgrade helper | Not tested | Snapshot before testing. |
 | ARM64 | Not tested | Launcher currently declares ARM64 support. |
-| PVE Scripts Management custom repository | Blocked by management app | Metadata is present, but current app flow does not ingest/display it. |
+| PVE Scripts Management custom repository | Blocked by management app | Metadata is present, but the tested app flow did not ingest or display it. |
 
 ## Known risks and fragile assumptions
 
@@ -493,8 +476,9 @@ Relevant implementation milestones:
 - `933032af2fbb00bff5061de97ae0c995097140df` — documented production use.
 - PR #2 / `620b4ed93475169551d939e2e7e711fac5b70116` — merged production fixes and metadata.
 - PR #3 / `6d4134d7cbc1a04fe3c6e9abcd64eee349e5250b` — re-merged the already integrated development branch. It added merge history but produced no file-tree differences relative to PR #2.
+- PR #4 / `457220a3d20fd38ce7c0ad2fa7de3236c34d28d1` — added the initial durable handoff, corrected the README's PVE Scripts Management status, and removed obsolete empty prototype files.
 
-Early empty root-level prototype files existed as `proxmox-guacamole.sh` and `proxmox-guacamole-install.sh`. They are obsolete; the supported paths are under `ct/` and `install/`.
+Early empty root-level prototype files existed as `proxmox-guacamole.sh` and `proxmox-guacamole-install.sh`. They were removed. The supported paths are under `ct/` and `install/`.
 
 ## Workflow for a normal enhancement
 
@@ -525,7 +509,7 @@ Early empty root-level prototype files existed as `proxmox-guacamole.sh` and `pr
 
 7. Test in a disposable LXC or on a disposable Proxmox test host.
 8. Record the exact environment and choices used.
-9. Update this document's test matrix, known risks, snapshot information, and history.
+9. Update this document's test matrix, known risks, status information, and history.
 10. Open a focused pull request, allow CI to pass, review the diff, and merge.
 
 ## Workflow when Itiligent publishes an update
@@ -575,7 +559,7 @@ Recommended hardening while doing this work:
 8. Test the upstream upgrade helper separately using a Proxmox snapshot.
 9. Update the pinned SHA in this document and record the new test evidence.
 
-## Suggested transformation test to add in the future
+## Suggested transformation test
 
 A useful CI enhancement would:
 
@@ -588,26 +572,7 @@ A useful CI enhancement would:
 7. assert the upstream identity-mutating block is absent;
 8. run `bash -n` on the transformed script.
 
-This would detect upstream drift before a user discovers it during an interactive LXC installation.
-
-## Workflow for Community Scripts inclusion
-
-Community Scripts already provides an Apache Guacamole script and generally follows a one-script-per-service policy.
-
-Do not open a duplicate new-script pull request directly against `community-scripts/ProxmoxVE`.
-
-The recommended route is:
-
-1. Open a GitHub Discussion with the Community Scripts maintainers.
-2. Explain that this is an Itiligent-based Guacamole installation with a different interactive feature set.
-3. Ask whether they prefer:
-   - enhancements to the existing Apache Guacamole script;
-   - a separate Itiligent Guacamole variant;
-   - continued external maintenance.
-4. If accepted as a new script, submit it first to `community-scripts/ProxmoxVED`, their development repository.
-5. If accepted as an enhancement to the existing script, submit a focused pull request to `community-scripts/ProxmoxVE`.
-
-If this project is moved into an official Community Scripts repository, refactor the launcher to use the standard in-repository installer resolution. The custom `curl` interception, `PROJECT_OWNER`, `PROJECT_REPO`, and `PROJECT_REF` bridge should no longer be necessary.
+This would detect upstream drift before it reaches an interactive LXC installation.
 
 ## PVE Scripts Management retest workflow
 
@@ -669,7 +634,7 @@ dev_mode="trace,keep,logs" bash -c "$(curl -fsSL \
   https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)"
 ```
 
-The `keep` flag is useful when the failed container must remain available for inspection. Review Community Scripts documentation before relying on flags because the outer builder is loaded from a moving branch.
+The `keep` flag is useful when the failed container must remain available for inspection. Review current Community Scripts documentation before relying on flags because the outer builder is loaded from a moving branch.
 
 ### Upgrade testing
 
@@ -699,7 +664,7 @@ Before declaring a change complete:
 - [ ] This handoff was updated.
 - [ ] Pull request and merge details were recorded.
 
-## Final state at this snapshot
+## Current engineering priorities
 
 The core direct installer works and is on `main`.
 
@@ -709,5 +674,4 @@ The most important next engineering improvements are:
 2. add a CI transformation test against the pinned source;
 3. test the optional Itiligent feature matrix;
 4. test the upgrade helper with snapshots;
-5. decide with Community Scripts maintainers whether this belongs as an enhancement, a separate development script, or an external project;
-6. retest PVE Scripts Management only after its custom-repository flow is demonstrably connected to the active catalogue and download routes.
+5. retest PVE Scripts Management only after its custom-repository flow is demonstrably connected to the active catalogue and download routes.
