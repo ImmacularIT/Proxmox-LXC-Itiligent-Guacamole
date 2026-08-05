@@ -1,0 +1,45 @@
+{
+  "name": "Itiligent Guacamole",
+  "slug": "itiligent-guacamole",
+  "categories": [
+    0
+  ],
+  "date_created": "2026-08-05",
+  "type": "ct",
+  "updateable": true,
+  "privileged": false,
+  "interface_port": 8080,
+  "documentation": "https://github.com/ImmacularIT/Proxmox-Itiligent-Guacamole",
+  "website": "https://github.com/itiligent/Easy-Guacamole-Installer",
+  "logo": "https://cdn.jsdelivr.net/gh/selfhst/icons/webp/apache-guacamole.webp",
+  "config_path": "/etc/guacamole/guacamole.properties",
+  "description": "A Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer. It preserves the upstream Guacamole feature set and interactive choices while using Proxmox-managed container identity, networking, and firewall policy.",
+  "install_methods": [
+    {
+      "type": "default",
+      "script": "ct/itiligent-guacamole.sh",
+      "resources": {
+        "cpu": 1,
+        "ram": 2048,
+        "hdd": 8,
+        "os": "debian",
+        "version": "13"
+      }
+    }
+  ],
+  "default_credentials": {
+    "username": "guacadmin",
+    "password": "guacadmin"
+  },
+  "notes": [
+    {
+      "type": "info",
+      "text": "The container setup is followed by the original interactive Itiligent configuration for database, authentication extensions, optional features, Nginx, and TLS."
+    },
+    {
+      "type": "warning",
+      "text": "Change the default guacadmin password immediately after the first login. Native access remains available at port 8080 unless the selected frontend configuration changes the preferred URL."
+    }
+  ],
+  "repository_url": "https://github.com/ImmacularIT/Proxmox-Itiligent-Guacamole"
+}
