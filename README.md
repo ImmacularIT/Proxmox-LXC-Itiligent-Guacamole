@@ -1,6 +1,6 @@
 # Proxmox Itiligent Guacamole
 
-A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://github.com/itiligent/Easy-Guacamole-Installer).
+A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://github.com/itiligent/Easy-Guacamole-Installer), maintained by [ImmacularIT](https://github.com/ImmacularIT).
 
 ## Scope
 
@@ -37,6 +37,8 @@ The core installation path has been successfully tested on Proxmox VE 9.2.6 usin
 
 Advanced container creation was also tested successfully with a selected bridge, static IPv4 address, and VLAN tag. An RDP connection from Guacamole to a Windows 11 server was created and used successfully.
 
+The compact Default Install network wizard and the project-specific Proxmox information panel are implemented on the active development branch and still require a disposable runtime test before merging.
+
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
 For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
@@ -59,6 +61,38 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligen
 Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
 The container setup is followed by the original interactive Itiligent configuration menus.
+
+## Proxmox container information panel
+
+New containers receive a project-specific description in the Proxmox VE Summary panel rather than the standard Community Scripts promotional panel.
+
+The panel:
+
+- displays the Itiligent logo and links to the upstream Easy Guacamole Installer;
+- identifies this project as an unofficial Proxmox LXC adaptation;
+- displays the ImmacularIT logo and links to the maintainer profile;
+- links to this adaptation repository and its issue tracker;
+- omits Community Scripts donation, script-page, discussion, and repository links.
+
+The associated Proxmox tags are:
+
+```text
+itiligent
+guacamole
+immacularit
+remote-access
+```
+
+The automatic `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
+
+Branding assets are stored in:
+
+```text
+assets/itiligent-logo.png
+assets/immacularit-logo.png
+```
+
+Implementation and runtime-test details are documented in [Proxmox Container Branding](docs/PROXMOX-BRANDING.md).
 
 ## PVE Scripts Management status
 
@@ -103,4 +137,4 @@ Change the password immediately after the first login. Nginx and TLS choices may
 
 ## Attribution
 
-The application installation logic and feature suite originate from Itiligent. The LXC launcher follows the structure of the Community Scripts Proxmox VE project. See the source repositories for their respective licenses and attribution.
+The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The LXC launcher uses the Community Scripts Proxmox VE framework for container creation. See the source repositories for their respective licenses and attribution.
