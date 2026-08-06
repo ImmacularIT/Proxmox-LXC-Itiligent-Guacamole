@@ -56,6 +56,7 @@ jobs:
           png_signature = b"\x89PNG\r\n\x1a\n"
           assets = [
               Path("assets/itiligent-logo.png"),
+              Path("assets/itiligent-logo-card.png"),
               Path("assets/immacularit-logo.png"),
           ]
           for asset in assets:
@@ -65,14 +66,16 @@ jobs:
 
           launcher = Path("ct/itiligent-guacamole.sh").read_text()
           required_markers = [
+              "configure_default_identity",
+              "configure_default_network",
               "configure_project_tags",
               "set_project_description",
               'asset_base="https://raw.githubusercontent.com/',
-              "itiligent-logo.png",
+              "itiligent-logo-card.png",
               "immacularit-logo.png",
               "Itiligent Easy Guacamole Installer",
               "community-script",
           ]
           for marker in required_markers:
-              assert marker in launcher, f"Missing branding marker: {marker}"
+              assert marker in launcher, f"Missing launcher marker: {marker}"
           PY
