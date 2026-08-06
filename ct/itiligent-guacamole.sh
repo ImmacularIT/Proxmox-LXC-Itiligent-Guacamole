@@ -38,10 +38,167 @@ function update_script() {
   exit 0
 }
 
+# Keep Default Install approachable while exposing the network choices that are
+# most likely to differ between Proxmox environments. The full Advanced wizard
+# remains available for all other container settings.
+configure_default_network() {
+  [[ "${METHOD:-}" == "default" ]] || return 0
+
+  # Preserve unattended/default-vars behavior. The compact wizard is only for
+  # an interactive Default Install launched from a terminal.
+  if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
+    return 0
+  fi
+
+  local bridge_path bridge selected_bridge ip_method static_ip gateway vlan
+  local current_gateway="${GATE:-}"
+  local -a bridges=()
+  local -a bridge_menu=()
+
+  case "$current_gateway" in
+  ,gw=*) current_gateway="${current_gateway#,gw=}" ;;
+  esac
+
+  # Linux bridge devices are represented by /sys/class/net/<name>/bridge.
+  # validate_bridge() comes from Community Scripts build.func and verifies that
+  # the selected bridge is valid and active for container creation.
+  for bridge_path in /sys/class/net/*/bridge; do
+    [[ -d "$bridge_path" ]] || continue
+    bridge="${bridge_path%/bridge}"
+    bridge="${bridge##*/}"
+    if validate_bridge "$bridge"; then
+      bridges+=("$bridge")
+    fi
+  done
+
+  # Retain a configured nonstandard default even if it was not found through
+  # sysfs enumeration, provided Community Scripts considers it valid.
+  local bridge_found=0
+  for bridge in "${bridges[@]}"; do
+    [[ "$bridge" == "${BRG:-vmbr0}" ]] && bridge_found=1
+  done
+  if [[ "$bridge_found" -eq 0 ]] && validate_bridge "${BRG:-vmbr0}"; then
+    bridges=("${BRG:-vmbr0}" "${bridges[@]}")
+  fi
+
+  if [[ ${#bridges[@]} -eq 0 ]]; then
+    msg_error "No active Proxmox network bridge was found"
+    exit 116
+  fi
+
+  for bridge in "${bridges[@]}"; do
+    if [[ "$bridge" == "${BRG:-vmbr0}" ]]; then
+      bridge_menu+=("$bridge" "Current default")
+    else
+      bridge_menu+=("$bridge" "Available bridge")
+    fi
+  done
+
+  while true; do
+    selected_bridge=$(whiptail \
+      --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+      --title "DEFAULT INSTALL: NETWORK BRIDGE" \
+      --ok-button "Next" --cancel-button "Exit Script" \
+      --menu "\nSelect the Proxmox bridge for this container:" 16 64 7 \
+      "${bridge_menu[@]}" \
+      --default-item "${BRG:-vmbr0}" \
+      3>&1 1>&2 2>&3) || exit_script
+
+    ip_method="dhcp"
+    [[ "${NET:-dhcp}" != "dhcp" ]] && ip_method="static"
+    ip_method=$(whiptail \
+      --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+      --title "DEFAULT INSTALL: IPv4" \
+      --ok-button "Next" --cancel-button "Exit Script" \
+      --menu "\nChoose how the container receives its IPv4 address:" 15 68 2 \
+      "dhcp" "Automatic address from DHCP (recommended)" \
+      "static" "Static address entered manually" \
+      --default-item "$ip_method" \
+      3>&1 1>&2 2>&3) || exit_script
+
+    if [[ "$ip_method" == "static" ]]; then
+      while true; do
+        static_ip=$(whiptail \
+          --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+          --title "DEFAULT INSTALL: STATIC IPv4" \
+          --ok-button "Next" --cancel-button "Exit Script" \
+          --inputbox "\nEnter the IPv4 address in CIDR format.\nExample: 192.168.2.50/24" 12 62 \
+          "$([[ "${NET:-dhcp}" != "dhcp" ]] && printf '%s' "$NET")" \
+          3>&1 1>&2 2>&3) || exit_script
+
+        if validate_ip_address "$static_ip"; then
+          break
+        fi
+        whiptail --title "INVALID STATIC ADDRESS" \
+          --msgbox "Enter a valid IPv4 CIDR address.\n\nExample: 192.168.2.50/24" 10 58
+      done
+
+      while true; do
+        gateway=$(whiptail \
+          --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+          --title "DEFAULT INSTALL: GATEWAY" \
+          --ok-button "Next" --cancel-button "Exit Script" \
+          --inputbox "\nEnter the IPv4 gateway.\nLeave blank only when no gateway is required." 12 62 \
+          "$current_gateway" \
+          3>&1 1>&2 2>&3) || exit_script
+
+        if validate_gateway_ip "$gateway" && validate_gateway_in_subnet "$static_ip" "$gateway"; then
+          break
+        fi
+        whiptail --title "INVALID GATEWAY" \
+          --msgbox "The gateway must be a valid IPv4 address in the same subnet as:\n\n${static_ip}" 11 62
+      done
+    else
+      static_ip="dhcp"
+      gateway=""
+    fi
+
+    while true; do
+      vlan=$(whiptail \
+        --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+        --title "DEFAULT INSTALL: VLAN" \
+        --ok-button "Review" --cancel-button "Exit Script" \
+        --inputbox "\nEnter a VLAN tag from 1 to 4094.\nLeave blank for an untagged interface." 12 62 \
+        "${VLAN:-}" \
+        3>&1 1>&2 2>&3) || exit_script
+
+      if validate_vlan_tag "$vlan"; then
+        break
+      fi
+      whiptail --title "INVALID VLAN" \
+        --msgbox "VLAN must be blank or a number between 1 and 4094." 9 58
+    done
+
+    local gateway_display="${gateway:-None}"
+    local vlan_display="${vlan:-None}"
+    if whiptail \
+      --backtitle "Proxmox VE Helper Scripts - ${APP}" \
+      --title "CONFIRM NETWORK SETTINGS" \
+      --yes-button "Use Settings" --no-button "Change" \
+      --yesno "\nBridge: ${selected_bridge}\nIPv4: ${static_ip}\nGateway: ${gateway_display}\nVLAN: ${vlan_display}\n\nUse these network settings?" 15 64; then
+      BRG="$selected_bridge"
+      SDN_VNET=""
+      NET="$static_ip"
+      GATE="$gateway"
+      VLAN="$vlan"
+      export BRG SDN_VNET NET GATE VLAN
+      break
+    fi
+  done
+
+  header_info
+  echo -e "${NETWORK}${BOLD}${DGN}Network Bridge: ${BGN}${BRG}${CL}"
+  echo -e "${NETWORK}${BOLD}${DGN}IPv4 Address: ${BGN}${NET}${CL}"
+  [[ -n "$GATE" ]] && echo -e "${GATEWAY}${BOLD}${DGN}IPv4 Gateway: ${BGN}${GATE}${CL}"
+  echo -e "${NETWORK}${BOLD}${DGN}VLAN Tag: ${BGN}${VLAN:-None}${CL}"
+  echo
+}
+
 _PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"
 _COMMUNITY_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
 
 start
+configure_default_network
 
 # Community Scripts resolves the installer from its own repository. Intercept
 # only that URL so the normal container builder can use this project's installer.
