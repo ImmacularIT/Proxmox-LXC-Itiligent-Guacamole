@@ -67,8 +67,9 @@ jobs:
           required_markers = [
               "configure_project_tags",
               "set_project_description",
-              "assets/itiligent-logo.png",
-              "assets/immacularit-logo.png",
+              'asset_base="https://raw.githubusercontent.com/',
+              "itiligent-logo.png",
+              "immacularit-logo.png",
               "Itiligent Easy Guacamole Installer",
               "community-script",
           ]
