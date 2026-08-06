@@ -48,3 +48,34 @@ jobs:
           install_script = Path("install") / f'{metadata["slug"]}-install.sh'
           assert install_script.is_file(), f"Missing installer: {install_script}"
           PY
+      - name: Validate Proxmox branding assets and launcher hooks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          png_signature = b"\x89PNG\r\n\x1a\n"
+          assets = [
+              Path("assets/itiligent-logo.png"),
+              Path("assets/itiligent-logo-card.png"),
+              Path("assets/immacularit-logo.png"),
+          ]
+          for asset in assets:
+              data = asset.read_bytes()
+              assert data.startswith(png_signature), f"Not a valid PNG: {asset}"
+              assert len(data) > len(png_signature), f"Empty branding asset: {asset}"
+
+          launcher = Path("ct/itiligent-guacamole.sh").read_text()
+          required_markers = [
+              "configure_default_identity",
+              "configure_default_network",
+              "configure_project_tags",
+              "set_project_description",
+              'asset_base="https://raw.githubusercontent.com/',
+              "itiligent-logo-card.png",
+              "immacularit-logo.png",
+              "Itiligent Easy Guacamole Installer",
+              "community-script",
+          ]
+          for marker in required_markers:
+              assert marker in launcher, f"Missing launcher marker: {marker}"
+          PY

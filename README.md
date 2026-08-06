@@ -1,6 +1,6 @@
 # Proxmox Itiligent Guacamole
 
-A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://github.com/itiligent/Easy-Guacamole-Installer).
+A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://github.com/itiligent/Easy-Guacamole-Installer), maintained by [ImmacularIT](https://github.com/ImmacularIT).
 
 ## Scope
 
@@ -35,9 +35,22 @@ No additional Guacamole functions are introduced by this project.
 
 The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
 
-The optional Itiligent choices remain available and should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, protocol connectivity, backups, and upgrades.
+Advanced container creation was tested successfully with a selected bridge, static IPv4 address, and VLAN tag.
 
-For the complete implementation history, known quirks, test matrix, upstream-update process, and future maintenance workflow, see [Project Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
+Default Install was tested successfully with:
+
+- accepting and changing the suggested container ID and hostname;
+- storage selection;
+- bridge selection;
+- DHCP and static IPv4 configuration;
+- gateway and VLAN configuration;
+- project-specific Proxmox Summary branding and tags.
+
+An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
+
+The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
+
+For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
 
 ## Direct installation
 
@@ -47,9 +60,53 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-Select **Advanced Install** in the first menu to configure bridge, VLAN, DHCP or static IPv4, IPv6, and other container properties.
+**Default Install** keeps the normal resource defaults and adds compact choices for:
+
+- suggested or custom container ID;
+- suggested or custom container hostname;
+- Proxmox storage;
+- Proxmox bridge;
+- DHCP or static IPv4;
+- IPv4 gateway when static addressing is selected;
+- optional VLAN tag.
+
+Pressing Enter in the container ID and hostname fields accepts the suggested values.
+
+Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
 The container setup is followed by the original interactive Itiligent configuration menus.
+
+## Proxmox container information panel
+
+New containers receive a project-specific description in the Proxmox VE Summary panel rather than the standard Community Scripts promotional panel.
+
+The panel:
+
+- displays the Itiligent logo and links to the upstream Easy Guacamole Installer;
+- identifies this project as an unofficial Proxmox LXC adaptation;
+- displays the ImmacularIT logo and links to the maintainer profile;
+- links to this adaptation repository and its issue tracker;
+- omits Community Scripts donation, script-page, discussion, and repository links.
+
+The associated Proxmox tags are:
+
+```text
+itiligent
+guacamole
+immacularit
+remote-access
+```
+
+The automatic `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
+
+Branding assets used by the panel are stored in:
+
+```text
+assets/itiligent-logo-card.png
+assets/immacularit-logo.png
+```
+
+Implementation and validation details are documented in [Proxmox Container Branding](docs/PROXMOX-BRANDING.md).
 
 ## PVE Scripts Management status
 
@@ -82,9 +139,11 @@ Password: guacadmin
 
 Change the password immediately after the first login. Nginx and TLS choices may provide a different preferred frontend URL while native port 8080 remains the fallback.
 
+After replacing an older Guacamole installation at the same URL, use a hard refresh or clear site data if the browser displays stale interface elements.
+
 ## Suggested functional checks
 
-1. Verify RDP, SSH, and VNC connections.
+1. Verify SSH and VNC connections. RDP to a Windows 11 server has been tested successfully.
 2. Test Nginx HTTP.
 3. Test self-signed TLS.
 4. Test Let's Encrypt using valid public DNS and reachable ports 80 and 443.
@@ -94,4 +153,4 @@ Change the password immediately after the first login. Nginx and TLS choices may
 
 ## Attribution
 
-The application installation logic and feature suite originate from Itiligent. The LXC launcher follows the structure of the Community Scripts Proxmox VE project. See the source repositories for their respective licenses and attribution.
+The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The LXC launcher uses the Community Scripts Proxmox VE framework for container creation. See the source repositories for their respective licenses and attribution.
