@@ -35,9 +35,18 @@ No additional Guacamole functions are introduced by this project.
 
 The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
 
-Advanced container creation was also tested successfully with a selected bridge, static IPv4 address, and VLAN tag. An RDP connection from Guacamole to a Windows 11 server was created and used successfully.
+Advanced container creation was tested successfully with a selected bridge, static IPv4 address, and VLAN tag.
 
-The compact Default Install network wizard and the project-specific Proxmox information panel are implemented on the active development branch and still require a disposable runtime test before merging.
+Default Install was tested successfully with:
+
+- accepting and changing the suggested container ID and hostname;
+- storage selection;
+- bridge selection;
+- DHCP and static IPv4 configuration;
+- gateway and VLAN configuration;
+- project-specific Proxmox Summary branding and tags.
+
+An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
 
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
@@ -51,12 +60,17 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-**Default Install** keeps the normal resource defaults and adds a compact network wizard for:
+**Default Install** keeps the normal resource defaults and adds compact choices for:
 
+- suggested or custom container ID;
+- suggested or custom container hostname;
+- Proxmox storage;
 - Proxmox bridge;
 - DHCP or static IPv4;
 - IPv4 gateway when static addressing is selected;
 - optional VLAN tag.
+
+Pressing Enter in the container ID and hostname fields accepts the suggested values.
 
 Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
@@ -85,14 +99,14 @@ remote-access
 
 The automatic `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
 
-Branding assets are stored in:
+Branding assets used by the panel are stored in:
 
 ```text
-assets/itiligent-logo.png
+assets/itiligent-logo-card.png
 assets/immacularit-logo.png
 ```
 
-Implementation and runtime-test details are documented in [Proxmox Container Branding](docs/PROXMOX-BRANDING.md).
+Implementation and validation details are documented in [Proxmox Container Branding](docs/PROXMOX-BRANDING.md).
 
 ## PVE Scripts Management status
 
@@ -124,6 +138,8 @@ Password: guacadmin
 ```
 
 Change the password immediately after the first login. Nginx and TLS choices may provide a different preferred frontend URL while native port 8080 remains the fallback.
+
+After replacing an older Guacamole installation at the same URL, use a hard refresh or clear site data if the browser displays stale interface elements.
 
 ## Suggested functional checks
 
