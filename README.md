@@ -35,9 +35,11 @@ No additional Guacamole functions are introduced by this project.
 
 The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
 
-The optional Itiligent choices remain available and should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, protocol connectivity, backups, and upgrades.
+Advanced container creation was also tested successfully with a selected bridge, static IPv4 address, and VLAN tag. An RDP connection from Guacamole to a Windows 11 server was created and used successfully.
 
-For the complete implementation history, known quirks, test matrix, upstream-update process, and future maintenance workflow, see [Project Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
+The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
+
+For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
 
 ## Direct installation
 
@@ -47,7 +49,14 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-Select **Advanced Install** in the first menu to configure bridge, VLAN, DHCP or static IPv4, IPv6, and other container properties.
+**Default Install** keeps the normal resource defaults and adds a compact network wizard for:
+
+- Proxmox bridge;
+- DHCP or static IPv4;
+- IPv4 gateway when static addressing is selected;
+- optional VLAN tag.
+
+Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
 The container setup is followed by the original interactive Itiligent configuration menus.
 
@@ -84,7 +93,7 @@ Change the password immediately after the first login. Nginx and TLS choices may
 
 ## Suggested functional checks
 
-1. Verify RDP, SSH, and VNC connections.
+1. Verify SSH and VNC connections. RDP to a Windows 11 server has been tested successfully.
 2. Test Nginx HTTP.
 3. Test self-signed TLS.
 4. Test Let's Encrypt using valid public DNS and reachable ports 80 and 443.
