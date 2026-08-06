@@ -4,6 +4,7 @@ This document records the implementation, design decisions, test results, known 
 
 **Status snapshot:** 2026-08-06  
 **Production branch:** `main`  
+**Production merge:** PR #6, commit `83bd61e0fee014f7b65604078b3a5c03fd9efd0e`  
 **Test platform:** Proxmox VE 9.2.6, unprivileged Debian 13 LXC  
 **Pinned Itiligent revision:** `676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce`
 
@@ -11,9 +12,9 @@ Always inspect the current repository state and upstream sources before making c
 
 ## Executive summary
 
-This project adapts the Itiligent Easy Guacamole Installer to a Community Scripts-style Proxmox LXC installation.
+This project adapts the Itiligent Easy Guacamole Installer to a Proxmox LXC installation that uses the Community Scripts container-building framework.
 
-The adaptation does not reimplement Apache Guacamole. It downloads a pinned Itiligent installer at runtime and applies deterministic compatibility transformations so the suite can run inside a Proxmox-managed LXC where installation occurs as `root`.
+The adaptation does not reimplement Apache Guacamole. It downloads a pinned Itiligent installer at runtime and applies compatibility transformations so the suite can run inside a Proxmox-managed LXC where installation occurs as `root`.
 
 The tested production installation method is:
 
@@ -22,18 +23,20 @@ bash <(curl -fsSL \
   https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-The validated core path includes:
+The validated production path includes:
 
 - Proxmox VE 9.2.6;
-- an unprivileged Debian 13 LXC;
-- local database installation;
+- unprivileged Debian 13 LXC creation;
+- local MariaDB/MySQL installation;
 - visible interactive Itiligent configuration;
-- native Guacamole access;
-- successful login and management access;
-- Advanced Install with a selected bridge, static IPv4 address, and VLAN tag;
-- an RDP connection to a Windows 11 server.
+- native Guacamole access and administration;
+- Advanced Install with a selected bridge, static IPv4 address, and VLAN;
+- Default Install with storage, suggested or custom container ID, suggested or custom hostname, bridge, DHCP or static IPv4, gateway, and VLAN selection;
+- correct final Proxmox `net0` values;
+- project-specific Itiligent and ImmacularIT Summary-panel branding and tags;
+- an RDP session to a Windows 11 server.
 
-A compact network wizard has been added to Default Install. It exposes bridge, DHCP/static IPv4, gateway, and VLAN choices without requiring the full Advanced wizard. That new Default path still requires a disposable runtime test before it should be considered validated.
+The remaining Itiligent optional features have not all been validated. See the test matrix.
 
 ## Project scope and ownership boundaries
 
@@ -53,11 +56,17 @@ The following boundaries are intentional:
 
 ```text
 .github/workflows/syntax.yml
-    Bash, JSON, and path validation.
+    Bash, JSON, metadata-path, asset, and launcher-hook validation.
+
+assets/itiligent-logo.png
+assets/itiligent-logo-card.png
+assets/immacularit-logo.png
+    Repository-hosted branding assets used by the Proxmox Summary panel.
 
 ct/itiligent-guacamole.sh
     Proxmox-host launcher. Creates the LXC through Community Scripts build.func.
-    Adds the compact Default Install network wizard.
+    Adds compact Default Install identity and networking prompts, project tags,
+    and the final Proxmox Summary-panel description.
 
 install/itiligent-guacamole-install.sh
     Runs inside the container. Downloads and patches the pinned Itiligent suite.
@@ -70,18 +79,21 @@ README.md
 
 docs/PROJECT-HANDOFF.md
     This implementation and maintenance handoff.
+
+docs/PROXMOX-BRANDING.md
+    Branding implementation and asset-maintenance notes.
 ```
 
 ## Runtime flow
 
-### 1. Host-side launcher
+### Host-side launcher
 
 `ct/itiligent-guacamole.sh` runs on the Proxmox host.
 
 It performs the following work:
 
 1. Sources the current Community Scripts `misc/build.func` from `community-scripts/ProxmoxVE/main`.
-2. Defines the application defaults:
+2. Defines application defaults:
    - 8 GB disk;
    - 1 CPU;
    - 2048 MB RAM;
@@ -89,18 +101,44 @@ It performs the following work:
    - unprivileged LXC;
    - ARM64 allowed by launcher metadata.
 3. Initializes the standard Community Scripts menu and error handling.
-4. Defines an `update_script()` function that invokes `/opt/itiligent-guacamole/upgrade-guacamole.sh` when an existing installation is detected.
-5. Sets the project installer source to this repository and defaults the project ref to `main`.
-6. Calls `start` to collect Default, Advanced, or saved container settings and storage selection.
-7. When `METHOD=default` and an interactive terminal is available, runs `configure_default_network`.
-8. Temporarily wraps the shell `curl` command so the Community Scripts request for its normal `install/${var_install}.sh` URL is rewritten to this repository's `install/itiligent-guacamole-install.sh`.
-9. Calls `build_container`.
-10. Removes the temporary `curl` wrapper.
-11. Prints the native fallback URL at `http://CONTAINER-IP:8080/guacamole`.
+4. Defines `update_script()`, which invokes `/opt/itiligent-guacamole/upgrade-guacamole.sh` when an existing installation is detected.
+5. Sets the project installer source to this repository and defaults `PROJECT_REF` to `main`.
+6. Calls `start` to collect Default, Advanced, or saved settings and storage selection.
+7. For interactive Default Install, calls `configure_default_identity`.
+8. For interactive Default Install, calls `configure_default_network`.
+9. Calls `configure_project_tags` before container creation.
+10. Temporarily wraps `curl` so the Community Scripts request for its normal `install/${var_install}.sh` URL is rewritten to this repository's `install/itiligent-guacamole-install.sh`.
+11. Calls `build_container`.
+12. Removes the temporary `curl` wrapper.
+13. Calls the normal Community Scripts `description()` completion function.
+14. Calls `set_project_description` to replace only the final visible Proxmox HTML description with project-specific branding.
+15. Prints the native fallback URL at `http://CONTAINER-IP:8080/guacamole`.
+
+### Default Install identity wizard
+
+The compact identity step is shown only for interactive Default Install.
+
+It asks for:
+
+- container ID;
+- container hostname.
+
+Both fields are prefilled. Pressing Enter accepts the suggested value.
+
+Implementation details:
+
+- the suggested ID is the current Community Scripts/Proxmox next ID;
+- `validate_container_id()` ensures the ID is numeric and unused across the cluster;
+- the suggested hostname is the normal application default;
+- `validate_hostname()` checks the entered name;
+- accepted values are exported as `CT_ID`, `CTID`, and `HN` before `build_container`;
+- saved/generated defaults, silent execution, and noninteractive execution are not interrupted by these prompts.
+
+Both accepting suggested values and entering custom values were tested successfully.
 
 ### Default Install network wizard
 
-The compact network wizard is intentionally limited to the settings that commonly differ between Proxmox environments:
+The compact network wizard exposes the settings most likely to differ between Proxmox environments:
 
 - bridge;
 - DHCP or static IPv4;
@@ -109,43 +147,61 @@ The compact network wizard is intentionally limited to the settings that commonl
 
 Implementation details:
 
-- It runs only when the Community Scripts method is `default`.
-- It is skipped for Advanced Install, User Defaults, App Defaults, generated settings, silent execution, and non-interactive execution.
-- It runs after the standard storage selection and before `build_container`.
-- It enumerates Linux bridge devices from `/sys/class/net/*/bridge`.
-- Every bridge is checked with Community Scripts `validate_bridge()`.
-- Static addresses are checked with `validate_ip_address()`.
-- Gateways are checked with `validate_gateway_ip()` and `validate_gateway_in_subnet()`.
-- VLAN values are checked with `validate_vlan_tag()` and may be blank for an untagged interface.
-- A final review screen allows the settings to be accepted or changed.
-- The selected values are assigned to and exported as:
+- it runs only when `METHOD=default` and a usable interactive terminal is present;
+- Advanced Install and saved/generated defaults retain their original behavior;
+- it runs after storage and identity selection and before `build_container`;
+- Linux bridges are enumerated from `/sys/class/net/*/bridge`;
+- bridge choices are checked with `validate_bridge()`;
+- static addresses are checked with `validate_ip_address()`;
+- gateways are checked with `validate_gateway_ip()` and `validate_gateway_in_subnet()`;
+- VLAN values are checked with `validate_vlan_tag()` and may be blank;
+- a final review screen allows the user to accept or change the settings;
+- accepted values are exported as `BRG`, `SDN_VNET`, `NET`, `GATE`, and `VLAN`;
+- `SDN_VNET` is cleared because the compact path selects Linux bridges rather than Proxmox SDN vnets;
+- per-install static IP values are not written into global defaults.
 
-  ```text
-  BRG
-  SDN_VNET
-  NET
-  GATE
-  VLAN
-  ```
+The Default path was tested successfully with bridge selection, DHCP and static addressing, gateway, and VLAN. The resulting `net0` configuration matched the chosen values.
 
-- `SDN_VNET` is cleared because this compact path selects Linux bridges rather than Proxmox SDN vnets.
-- Per-install static IP choices are not written into global defaults, avoiding reuse of a unique address on a later container.
-
-### Why the installer URL interception exists
+### Installer URL interception
 
 The Community Scripts builder normally calculates an installer URL inside the official `community-scripts/ProxmoxVE` repository. This project lives in a separate repository, so the launcher intercepts only that exact installer URL and substitutes this project's installer URL.
 
-This is a compatibility bridge and depends on the current Community Scripts implementation continuing to:
+This compatibility bridge depends on the current Community Scripts implementation continuing to:
 
 - fetch the installer with `curl`;
 - request the expected official raw URL;
 - perform that request after the wrapper has been defined.
 
-If `build.func` changes its download client, URL format, variable naming, or execution order, the interception may stop working. Every maintenance cycle should inspect the current `build.func` before assuming this mechanism remains valid.
+If `build.func` changes its download client, URL format, variable naming, or execution order, the interception may stop working. Inspect the current `build.func` during every maintenance cycle.
 
-The Community Scripts framework is loaded from its moving `main` branch. Therefore, the Itiligent source is pinned, but the outer container builder is not fully reproducible.
+The Itiligent source is pinned, but the outer Community Scripts builder is loaded from a moving `main` branch and is therefore not fully reproducible.
 
-### 2. Container-side installer
+### Project tags and Summary-panel branding
+
+The launcher removes the automatic `community-script` marker while preserving user-supplied tags and ensuring these tags exist:
+
+```text
+itiligent
+guacamole
+immacularit
+remote-access
+```
+
+The final Proxmox Summary panel:
+
+- displays the Itiligent logo;
+- identifies the application as Itiligent Guacamole LXC;
+- states that this is an unofficial Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer;
+- displays the ImmacularIT logo;
+- credits ImmacularIT as adaptation maintainer;
+- links to the Itiligent repository, the ImmacularIT profile, this project repository, and its issue tracker;
+- omits Community Scripts donation, script-page, discussion, and repository links.
+
+The standard Community Scripts `description()` function must run first so its completion hooks remain intact. `set_project_description()` must run afterward so the project-specific HTML remains visible.
+
+The first Itiligent asset path rendered only its alternative text in Proxmox. A refreshed PNG was added as `assets/itiligent-logo-card.png`, the launcher was switched to that filename, and the final runtime test passed.
+
+## Container-side installer
 
 `install/itiligent-guacamole-install.sh` runs inside the newly created LXC.
 
@@ -163,46 +219,44 @@ It installs these adaptation dependencies:
 ca-certificates curl wget python3 iproute2 cron procps
 ```
 
-It creates and protects these paths:
+It creates and protects:
 
 ```text
 /opt/itiligent-guacamole
 /var/backups/guacamole
 ```
 
-Both are set to mode `0700`.
+Both paths use mode `0700`.
 
-### 3. Pinned upstream download
+## Pinned upstream download
 
-The adapter initially downloads `1-setup.sh` from the pinned upstream commit:
+The adapter downloads `1-setup.sh` from:
 
 ```text
 676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce
 ```
 
-The temporary local path is:
+The temporary parent-script path is:
 
 ```text
 /root/1-setup.sh
 ```
 
-The downloaded parent script is transformed with an embedded Python program before execution.
+An embedded Python program transforms the downloaded parent script before it is executed.
 
 ## Exact upstream transformations
-
-The Python transformation is the core of the container-side adaptation. It modifies the downloaded upstream script and writes the result back to `/root/1-setup.sh`.
 
 ### Root execution
 
 The upstream block that prevents root execution and expects a sudo user is removed.
 
-All parent-script `sudo` and `sudo -E` invocations are removed, and references to `SUDO_USER` are replaced with `root`.
+Parent-script `sudo` and `sudo -E` invocations are removed, and `SUDO_USER` references are replaced with `root`.
 
 Reason: Community Scripts installers run as root inside the container.
 
 ### Stable appliance paths
 
-These upstream variables are replaced:
+These values are substituted:
 
 ```text
 USER_HOME_DIR=/root
@@ -212,7 +266,7 @@ DB_BACKUP_DIR=/var/backups/guacamole
 
 The upstream `GITHUB` download base is replaced with a raw GitHub URL containing the pinned commit.
 
-Reason: avoid dependence on a transient sudo user's home and prevent child-script downloads from drifting to a moving upstream branch.
+Reason: avoid dependence on a sudo user's home and prevent child-script downloads from drifting to a moving upstream branch.
 
 ### Misleading Ctrl+Z message
 
@@ -222,7 +276,7 @@ The upstream message suggesting `Ctrl+Z` is replaced with:
 Interactive configuration follows. Complete each prompt to continue.
 ```
 
-Reason: suspending the process inside the Proxmox container builder is unsafe and confusing.
+Reason: suspending the process inside the Proxmox builder is unsafe and confusing.
 
 ### Container identity and networking
 
@@ -236,7 +290,7 @@ The replacement derives values from the existing container identity without rewr
 - `DEFAULT_FQDN` from the existing hostname/domain;
 - `RDP_SHARE_HOST` from the existing server name when unset.
 
-Reason: Proxmox must remain the authority for container hostname and network configuration.
+Reason: Proxmox remains the authority for container identity and networking.
 
 ### Child-script root adaptation
 
@@ -246,20 +300,20 @@ Before any downloaded child script is executed, an inserted shell block loops ov
 /opt/itiligent-guacamole/*.sh
 ```
 
-For every child script it:
+For each child script it:
 
 - removes `sudo -E`;
 - removes `sudo`;
 - replaces `${SUDO_USER}` with `root`;
 - replaces `$SUDO_USER` with `root`.
 
-Reason: adapting only the parent script is insufficient because the parent downloads and executes additional scripts.
+Reason: the parent downloads and executes additional scripts that carry the same sudo-user assumptions.
 
 ### UFW removal
 
 The package list in `2-install-guacamole.sh` is modified to remove `ufw`.
 
-UFW command lines are replaced with no-op commands in these known scripts:
+UFW command lines are replaced with no-ops in:
 
 ```text
 2-install-guacamole.sh
@@ -268,7 +322,7 @@ UFW command lines are replaced with no-op commands in these known scripts:
 4b-install-tls-letsencrypt-nginx.sh
 ```
 
-Reason: firewall policy belongs to Proxmox and the surrounding network. Installing or changing UFW inside the LXC can conflict with that policy.
+Reason: firewall policy belongs to Proxmox and the surrounding network.
 
 ### Upgrade-helper paths
 
@@ -279,13 +333,11 @@ USER_HOME_DIR=/root
 DOWNLOAD_DIR=/opt/itiligent-guacamole
 ```
 
-The existence of the helper is used by the host-side `update_script()` detection logic.
-
-The upgrade workflow has not yet been functionally tested and should be treated as unvalidated.
+The helper exists and is exposed through the launcher update path, but its actual upgrade behavior has not yet been functionally validated.
 
 ### Cleanup guard
 
-The upstream move operation for `1-setup.sh` is changed from an unconditional `mv` to a guarded operation that succeeds when the source file has already moved or no longer exists.
+The upstream move operation for `1-setup.sh` is changed from an unconditional `mv` to a guarded operation.
 
 Reason: avoid a fatal cleanup failure if upstream layout or ordering changes.
 
@@ -293,29 +345,19 @@ Reason: avoid a fatal cleanup failure if upstream layout or ordering changes.
 
 ### Original symptom
 
-The first real installation reached the Itiligent setup, but interactive questions appeared blank or were overwritten. The display repeatedly showed the Community Scripts spinner while the installer silently waited for input. Pressing Enter several times eventually produced an empty-password warning.
-
-The relevant visible behavior included:
-
-```text
-Starting Itiligent Guacamole setup
-MySQL setup options:
-Passwords don't match or can't be null. Please try again.
-```
+The first installation reached the Itiligent setup, but questions appeared blank or were overwritten. The Community Scripts spinner continued redrawing the terminal while the installer waited for input. Repeated Enter presses eventually produced an empty-password warning.
 
 ### Root cause
 
-The interactive upstream setup was wrapped in Community Scripts `msg_info`/`msg_ok` status handling.
-
-`msg_info` starts an animated spinner that redraws the terminal line. The upstream installer was still accepting input, but the spinner repeatedly erased or obscured its questions.
+The interactive upstream setup was wrapped in Community Scripts `msg_info`/`msg_ok` handling. `msg_info` starts a spinner that repeatedly redraws the terminal line and obscured the interactive questions.
 
 ### Fix
 
-Commit `105ce8e997ba00b7699e2a43800e5e261a8d07bd` made three changes:
+Commit `105ce8e997ba00b7699e2a43800e5e261a8d07bd`:
 
-1. Removed the `msg_info` wrapper around the interactive setup.
-2. Added static explanatory messages before the menu.
-3. Attached the upstream script's standard input directly to `/dev/tty` when available:
+1. removed the `msg_info` wrapper around the interactive setup;
+2. added static explanatory messages;
+3. attached standard input to `/dev/tty` when available:
 
 ```bash
 if [[ -r /dev/tty ]]; then
@@ -325,106 +367,53 @@ else
 fi
 ```
 
-This preserved the original interactive menus and made the questions visible. The subsequent installation completed successfully.
+This preserved the upstream menus and made all questions visible. Password input intentionally does not echo.
 
-## Network-selection behavior
+## Browser-cache observation
 
-Network configuration is applied by the Community Scripts container builder. This project now exposes two levels of network configuration:
+During final validation, the Guacamole user editor temporarily appeared without the `Login disabled` checkbox.
 
-### Default Install
+The installed Guacamole 1.6.0 WAR and exploded Tomcat template both contained `FIELD_HEADER_USER_DISABLED`. A Shift+Refresh restored the field, confirming stale browser frontend content rather than an installer or application defect.
 
-Default Install keeps the normal application resource defaults and the standard storage selection. It then presents the compact project-specific network wizard for:
+Maintenance implication: after reinstalling or upgrading Guacamole, use a hard refresh or clear site data before treating a missing frontend control as a server-side regression.
 
-- bridge;
-- DHCP or static IPv4;
-- gateway;
-- VLAN.
+## Metadata and repository validation
 
-IPv6, DNS, MTU, MAC address, SDN vnets, and other uncommon properties remain outside the compact wizard.
+`json/itiligent-guacamole.json` contains the application name and slug, CT type, unprivileged status, port, Debian 13 resource defaults, launcher path, initial credentials, repository URL, and user notes.
 
-### Advanced Install
+`.github/workflows/syntax.yml` validates:
 
-Advanced Install retains the full Community Scripts wizard, including:
+- Bash syntax for the launcher and container installer;
+- JSON syntax and required metadata fields;
+- expected slug and CT type;
+- existence of metadata-derived launcher and installer paths;
+- valid nonempty PNG signatures for the branding assets;
+- presence of Default identity/network, branding, and tag hooks in the launcher.
 
-- bridge or supported SDN selection;
-- DHCP, static IPv4, or range scanning;
-- gateway;
-- IPv6;
-- DNS;
-- MTU;
-- MAC address;
-- VLAN;
-- CPU, RAM, disk, SSH, and container features.
+The workflow does not yet:
 
-Advanced Install was tested successfully with a selected bridge, static IPv4 address, and VLAN tag on 2026-08-06.
-
-For a VLAN-aware trunk, select the appropriate bridge and enter the VLAN tag. If a bridge is already an untagged/access connection to the target network, do not also set a VLAN tag.
-
-## Metadata and CI work
-
-### Metadata
-
-`json/itiligent-guacamole.json` contains:
-
-- name and slug;
-- CT type;
-- unprivileged-container status;
-- port 8080;
-- Debian 13 resource defaults;
-- launcher path `ct/itiligent-guacamole.sh`;
-- initial upstream credentials;
-- repository URL and user notes.
-
-The metadata path and naming conventions are internally consistent with the repository layout.
-
-### Repository validation workflow
-
-`.github/workflows/syntax.yml` runs on pushes and pull requests.
-
-It currently validates:
-
-- Bash syntax for the launcher;
-- Bash syntax for the container installer;
-- JSON syntax for the metadata;
-- presence of required metadata fields;
-- expected slug and type;
-- existence of every metadata launcher path;
-- existence of `install/${slug}-install.sh`.
-
-The workflow does not currently:
-
-- download the pinned upstream source;
-- execute the Python adaptation in a temporary directory;
-- verify that every expected replacement matched exactly once;
+- download and transform the pinned upstream source;
+- verify required replacement counts;
 - run ShellCheck;
 - create an LXC;
-- exercise the compact Default network wizard;
-- validate optional Itiligent features.
+- automate the interactive Default wizard;
+- test optional Itiligent features.
 
-Adding deterministic transformation and launcher tests is a high-value future enhancement.
+One PR #6 validation attempt failed before checkout because GitHub Actions returned `Service Unavailable` while resolving `actions/checkout`. This was an external runner failure, not a project validation failure. The complete Proxmox runtime test passed.
 
 ## PVE Scripts Management interoperability finding
 
-The metadata was created because PVE Scripts Management exposes a custom repository setting. Testing showed that adding this repository did not make the script appear after synchronization.
+The repository includes Community-style JSON metadata, but testing showed that the installed PVE Scripts Management/ProxmoxVE-Local custom-repository flow did not import it into the searchable catalogue.
 
-Observed evidence from the PVE Scripts Management container:
+Observed evidence:
 
-- no `itiligent-guacamole.json` file existed under `/opt/**/scripts/json/`;
-- service logs contained no request to `ImmacularIT/Proxmox-Itiligent-Guacamole`;
-- service logs showed downloads only from `community-scripts/ProxmoxVE`.
+- no local `itiligent-guacamole.json` was downloaded under the application's scripts directory;
+- logs contained no request to this repository;
+- active synchronization and catalogue paths used PocketBase and the official Community Scripts repository.
 
-Source review of the tested PVE Scripts Management/ProxmoxVE-Local version showed an integration gap:
+Keep the metadata for future compatibility, but do not document custom-repository installation as working until repository synchronization, catalogue merging, script resolution, and downloads have been retested end to end.
 
-- repository settings expose create/update/delete/enable operations;
-- the active Available Scripts page is populated from PocketBase;
-- normal synchronization refreshes PocketBase data and logos;
-- auto-sync also treats PocketBase as the source of truth;
-- the active download routes require a PocketBase script record;
-- lower-level local JSON code exists but is not connected end-to-end to custom repository synchronization and selection.
-
-Therefore, the currently tested installation method is the direct host command. The JSON metadata is retained for future interoperability testing.
-
-Do not document custom-repository installation as working unless the full synchronization, catalogue, and download flow has been retested against the installed PVE Scripts Management version.
+The supported installation method remains the direct host command.
 
 ## Test matrix
 
@@ -432,12 +421,18 @@ Do not document custom-repository installation as working unless the full synchr
 |---|---|---|
 | Unprivileged Debian 13 LXC creation | Passed | Tested on Proxmox VE 9.2.6. |
 | Local database installation | Passed | Completed through interactive Itiligent setup. |
-| Interactive question visibility and password entry | Passed | Fixed by removing the spinner wrapper and using `/dev/tty`. Password input intentionally does not echo. |
-| Native Guacamole access | Passed | Native URL available on port 8080. |
-| Initial login and management UI | Passed | Login and administration confirmed. |
-| Advanced bridge/static IPv4/VLAN install | Passed | Confirmed on 2026-08-06. |
-| Default compact network wizard | Implemented; runtime test pending | Requires a disposable Default Install test with DHCP and static/VLAN paths. |
-| RDP connection | Passed | Connection to a Windows 11 server worked without problems. |
+| Interactive question visibility/password entry | Passed | Spinner removed; `/dev/tty` used; passwords do not echo. |
+| Native Guacamole access | Passed | Port 8080 fallback confirmed. |
+| Initial login and management UI | Passed | Administration confirmed. |
+| Advanced bridge/static IPv4/VLAN | Passed | Confirmed 2026-08-06. |
+| Default storage selection | Passed | Confirmed 2026-08-06. |
+| Default suggested container ID/name | Passed | Enter accepted displayed defaults. |
+| Default custom container ID/name | Passed | Custom values appeared correctly in Proxmox. |
+| Default bridge/DHCP/static/gateway/VLAN | Passed | Final `net0` matched selected values. |
+| Project Summary-panel branding | Passed | Both logos, attribution, and links displayed. |
+| Project tags | Passed | Required tags present; `community-script` absent. |
+| Browser-cache handling | Passed | Hard refresh restored stale Guacamole UI control. |
+| RDP connection | Passed | Windows 11 session worked after final changes. |
 | SSH connection | Not tested | Pending. |
 | VNC connection | Not tested | Pending. |
 | Remote MySQL/MariaDB | Not tested | Pending. |
@@ -453,116 +448,115 @@ Do not document custom-repository installation as working unless the full synchr
 | guacd TLS helper | Not tested | Pending. |
 | fail2ban helper | Not tested | Pending. |
 | Backup cron/helper | Not tested | Pending. |
-| Upgrade helper | Not tested | Take a snapshot before testing. |
-| ARM64 | Not tested | Launcher currently declares ARM64 support. |
-| PVE Scripts Management custom repository | Blocked by tested management-app flow | Metadata is present, but the tested app flow did not ingest or display it. |
+| Upgrade helper | Not tested | Snapshot before testing. |
+| ARM64 | Not tested | Launcher declares support. |
+| PVE Scripts Management custom repository | Blocked by tested app flow | Metadata present; active app flow did not ingest it. |
 
 ## Known risks and fragile assumptions
 
 ### Moving Community Scripts builder
 
-The launcher sources `community-scripts/ProxmoxVE/main/misc/build.func`. A future Community Scripts change can affect this project without any commit here.
+The launcher sources `community-scripts/ProxmoxVE/main/misc/build.func`. A future change can affect this project without any commit here.
 
-Before a release or maintenance change, inspect the current builder and retest:
+Before a release or maintenance change, verify:
 
 - installer URL interception;
 - `METHOD` values;
 - `start` returning before `build_container`;
-- runtime variables `BRG`, `SDN_VNET`, `NET`, `GATE`, and `VLAN`;
-- validation helpers used by the compact network wizard.
+- runtime variables `CT_ID`, `CTID`, `HN`, `BRG`, `SDN_VNET`, `NET`, `GATE`, `VLAN`, and `TAGS`;
+- validation helpers used by the compact wizards;
+- the order and side effects of `description()`.
 
-### Default network wizard assumptions
+### Default-wizard assumptions
 
-The compact wizard depends on:
+The compact wizards depend on:
 
-- Linux bridge devices appearing under `/sys/class/net/<name>/bridge`;
-- Community Scripts validation helpers remaining available after sourcing `build.func`;
-- `build_container` continuing to consume the exported network variables;
-- interactive Default Install retaining terminal input.
+- an interactive terminal;
+- Community Scripts validation helpers remaining available;
+- Linux bridges appearing under `/sys/class/net/<name>/bridge`;
+- `build_container` consuming the exported identity and network variables.
 
-The wizard deliberately does not expose Proxmox SDN vnets. Use Advanced Install for SDN and the complete network feature set.
+The compact path does not expose Proxmox SDN vnets, IPv6, DNS, MTU, MAC address, SSH settings, or uncommon container features. Use Advanced Install for those.
 
 ### Silent upstream patch misses
 
-Several Python replacements use `re.sub()` or `str.replace()` without checking how many matches were found.
+Several Python substitutions use `re.sub()` or `str.replace()` without verifying the number of matches. An upstream text change can therefore cause a patch to stop applying without an immediate, specific error.
 
-If upstream changes a comment, variable assignment, filename, or exact message, a patch can stop applying without failing immediately.
-
-A future hardening change should use `re.subn()` or explicit precondition checks and abort unless every required transformation matches the expected count.
+A future hardening change should use checked substitutions and abort unless every required marker matches the expected count.
 
 ### Exact upstream markers
 
-The current adapter depends on these upstream text anchors and conventions:
+The adapter depends on:
 
 - the root-preflight comment block;
 - `USER_HOME_DIR`, `DOWNLOAD_DIR`, `DB_BACKUP_DIR`, and `GITHUB` assignments;
-- the identity block beginning near the `/etc/hosts` consistency comment and ending before the MySQL selection;
+- the identity block before MySQL selection;
 - the exact Ctrl+Z message;
-- the customization-pause comment used as the child-patch insertion point;
-- the exact `mv $USER_HOME_DIR/1-setup.sh $DOWNLOAD_DIR` line;
+- the child-patch insertion comment;
+- the exact cleanup `mv` line;
 - known child-script filenames;
 - the package-list fragment containing `ufw`;
-- upgrade-helper variable assignments.
+- upgrade-helper path assignments.
 
 Every upstream update must verify these markers.
 
 ### Interactive TTY requirement
 
-The Itiligent installer remains interactive. It expects a usable terminal and cannot be treated as a fully unattended Community Scripts installer without additional design work.
+The Itiligent installer remains interactive. Do not wrap it in spinner-based status output. A fully unattended mode would require separate design and testing.
 
-Do not reintroduce spinner-based status output around the interactive section.
+### External branding images
+
+The Proxmox browser must be able to retrieve images from `raw.githubusercontent.com`. Text and links remain usable if an image is unavailable. A new asset filename may be needed to bypass stale caching after replacing an image.
 
 ### Upgrade behavior
 
-The upgrade helper is inherited from Itiligent and patched only for root-owned paths. Its actual download behavior, application changes, rollback behavior, and compatibility with the LXC adaptation have not been validated.
+The upgrade helper is inherited from Itiligent and patched only for root-owned paths. Its application changes, rollback behavior, and LXC compatibility remain unvalidated.
 
 ### Security defaults
 
-The initial upstream credentials are:
+Initial upstream credentials are:
 
 ```text
 Username: guacadmin
 Password: guacadmin
 ```
 
-The password must be changed immediately after first login.
+Change the password immediately after first login.
 
 ## Git and pull-request history
 
-Relevant implementation milestones:
+Relevant milestones:
 
 - `014e5c126de31f8512d8d95e94d6182c63a67345` — added the Proxmox LXC launcher.
 - `ea6b4ec33d6e14a60e10591210a7cc3dcbac580b` — added the root-adapted Itiligent installer.
-- `55160b0338976dffd693ed155ee14c614e9826f1` — documented scope and test plan.
 - `2b7db5b3142214f7411e33d1e4f35ae06a598876` — added Bash syntax validation.
 - PR #1 / `6c5c28e3ebf21e3a7c7bde5612b64e0cd8168b8e` — merged the initial adaptation.
 - `105ce8e997ba00b7699e2a43800e5e261a8d07bd` — fixed hidden interactive questions.
-- `b935ee737043831caeb9473354d959f6b2ee0629` — added PVE Scripts Management metadata.
+- `b935ee737043831caeb9473354d959f6b2ee0629` — added metadata.
 - `c628e95fa41c8c74cb7e9ef7555e8ff3f2337f29` — changed the default project ref to `main`.
 - `84cbf77dd88059efadb7c9f52d60232f3f62bcb4` — expanded metadata/path validation.
-- `933032af2fbb00bff5061de97ae0c995097140df` — documented production use.
 - PR #2 / `620b4ed93475169551d939e2e7e711fac5b70116` — merged production fixes and metadata.
 - PR #3 / `6d4134d7cbc1a04fe3c6e9abcd64eee349e5250b` — re-merged the already integrated development branch without file-tree differences relative to PR #2.
-- PR #4 / `457220a3d20fd38ce7c0ad2fa7de3236c34d28d1` — added the initial technical handoff, corrected README PVE Scripts Management status, and removed obsolete empty prototypes.
-- PR #5 / `d122e8d9a09d3bdcf484c59eb1a855dccdea3adc` — removed unrelated community-outreach and authorship-oriented material from the handoff.
-- `0e6a0b0701a93f7cef8265c677dd38a714e6e133` — added the compact Default Install network wizard.
-- `d68d6469366dbf74f34cd7808c27efb8d54695a3` — recorded Advanced networking and Windows 11 RDP validation in the README.
+- PR #4 / `457220a3d20fd38ce7c0ad2fa7de3236c34d28d1` — added the initial technical handoff and corrected README status.
+- PR #5 / `d122e8d9a09d3bdcf484c59eb1a855dccdea3adc` — removed unrelated outreach and authorship-oriented material from the handoff.
+- `0e6a0b0701a93f7cef8265c677dd38a714e6e133` — added the compact Default network wizard.
+- PR #6 / `83bd61e0fee014f7b65604078b3a5c03fd9efd0e` — merged compact Default identity/networking, project branding, assets, tags, validation, and final runtime-test documentation.
 
-Early empty root-level prototype files existed as `proxmox-guacamole.sh` and `proxmox-guacamole-install.sh`. They were removed. The supported paths are under `ct/` and `install/`.
+The supported launcher and installer paths are under `ct/` and `install/`.
 
 ## Workflow for a normal enhancement
 
 1. Inspect current `main`, recent commits, and open pull requests.
 2. Read this document and identify affected assumptions.
 3. Create a focused branch from current `main`.
-4. Keep the runtime model intact unless the enhancement explicitly redesigns it:
+4. Preserve the runtime model unless intentionally redesigning it:
    - launcher on the Proxmox host;
    - installer inside the LXC;
    - pinned upstream source;
-   - deterministic runtime transformations;
-   - Proxmox-owned networking and firewall.
-5. Do not commit manually edited copies of downloaded upstream scripts unless the architecture is intentionally changing. Express compatibility changes in the adapter so they remain auditable.
-6. Run repository validation locally:
+   - auditable runtime transformations;
+   - Proxmox-owned identity, networking, DNS, and firewall.
+5. Express compatibility changes in the adapter rather than committing manually edited upstream copies.
+6. Run local validation:
 
    ```bash
    bash -n ct/itiligent-guacamole.sh
@@ -570,105 +564,88 @@ Early empty root-level prototype files existed as `proxmox-guacamole.sh` and `pr
    python3 -m json.tool json/itiligent-guacamole.json >/dev/null
    ```
 
-7. Test runtime changes in a disposable LXC or on a disposable Proxmox test host.
+7. Test runtime changes in a disposable LXC.
 8. Record the exact environment and selections used.
-9. Update this document's test matrix, known risks, status information, and history.
-10. Open a focused pull request, allow CI to pass, review the diff, and merge.
+9. Update this document's status, test matrix, risks, and history.
+10. Open a focused pull request, review validation and the diff, then merge.
 
 ## Workflow when Itiligent publishes an update
 
-Do not simply replace the pinned SHA and assume the adapter remains valid.
+Do not simply replace the pinned SHA.
 
-### Phase 1: identify a candidate
+### Identify and compare
 
-1. Determine the intended upstream release, tag, or commit from the official Itiligent repository.
-2. Record the candidate SHA.
-3. Review upstream release notes and commit history.
-4. Compare the pinned revision with the candidate, especially:
+1. Select the intended upstream release, tag, or commit.
+2. Record its SHA.
+3. Review upstream release notes and history.
+4. Compare at least:
    - `1-setup.sh`;
    - `2-install-guacamole.sh`;
-   - `3-install-nginx.sh`;
-   - TLS scripts;
+   - Nginx and TLS scripts;
    - authentication and optional-feature scripts;
-   - `backup-guacamole.sh`;
-   - `upgrade-guacamole.sh`.
+   - backup and upgrade helpers;
+   - custom-theme assets and manifest.
 
-### Phase 2: verify the patch contract
+### Verify the patch contract
 
-Before changing `UPSTREAM_COMMIT`, confirm that every marker listed under **Known risks and fragile assumptions** still exists or deliberately update the adapter.
+Confirm every marker listed under **Known risks and fragile assumptions** still exists or deliberately update the adapter.
 
-Recommended hardening while doing this work:
+Recommended hardening:
 
 - convert required substitutions to checked substitutions;
-- fail when an expected marker is missing;
-- fail when a replacement occurs more than once unexpectedly;
-- add a CI fixture that downloads the pinned parent script, applies the adapter, and asserts the resulting paths and inserted blocks;
-- inspect child scripts for newly introduced `sudo`, UFW, hostname, DNS, system firewall, or user-home assumptions.
+- fail when a marker is missing or unexpectedly duplicated;
+- add a CI fixture that downloads the pinned parent script and applies the transformation;
+- inspect child scripts for new sudo, UFW, hostname, DNS, firewall, or user-home assumptions.
 
-### Phase 3: update and validate
+### Update and validate
 
-1. Change `UPSTREAM_COMMIT` only after the comparison is complete.
-2. Update any affected filenames or patch patterns.
-3. Run syntax and metadata validation.
-4. Run the transformation against the candidate source in a temporary environment.
-5. Verify the resulting parent script contains:
-   - root-owned paths;
-   - pinned child download base;
-   - child patch block;
-   - no upstream identity rewrite block;
-   - no spinner around interactive execution.
-6. Perform the full core installation in a new unprivileged Debian 13 LXC.
-7. Retest previously validated behavior, including RDP.
-8. Test the upstream upgrade helper separately using a Proxmox snapshot.
-9. Update the pinned SHA in this document and record the new test evidence.
+1. Change `UPSTREAM_COMMIT` only after comparison.
+2. Update affected filenames or patch patterns.
+3. Run syntax, metadata, asset, and launcher-hook validation.
+4. Run the transformation against the candidate source.
+5. Verify root paths, pinned child downloads, child patch block, identity preservation, and interactive execution.
+6. Perform a full new installation in an unprivileged Debian LXC.
+7. Retest Default identity/networking, branding, login, administration, and RDP.
+8. Test the upgrade helper separately using a Proxmox snapshot.
+9. Update this document with the new SHA and evidence.
 
 ## Suggested automated tests
 
 ### Upstream transformation test
 
-A useful CI enhancement would:
+A useful CI enhancement would download the pinned `1-setup.sh`, run the exact Python transformation, assert all required replacements, verify root-owned paths and child-patch blocks, verify removed identity/UFW/sudo behavior, and run `bash -n` on the result.
 
-1. download `${UPSTREAM_BASE}/1-setup.sh`;
-2. run the exact Python patch logic against a temporary copy;
-3. assert all required replacements matched;
-4. assert expected path values;
-5. assert the child-script patch block exists;
-6. assert the old Ctrl+Z message is absent;
-7. assert the upstream identity-mutating block is absent;
-8. run `bash -n` on the transformed script.
+### Default wizard test
 
-### Default network wizard test
+A launcher test could stub Community Scripts validation functions and `whiptail`, then verify:
 
-A useful launcher test would provide stub implementations of the Community Scripts validation functions and `whiptail`, then assert that:
+- the functions run only for interactive Default Install;
+- suggested and custom ID/hostname handling;
+- bridge enumeration and validation;
+- DHCP clearing the gateway;
+- static CIDR and gateway handling;
+- blank and valid VLAN handling;
+- invalid inputs repeating the relevant question;
+- accepted variables being exported before `build_container`.
 
-- the function runs only for `METHOD=default`;
-- bridge choices are enumerated and validated;
-- DHCP clears the gateway;
-- static addressing retains CIDR and gateway values;
-- VLAN blank and 1-4094 are accepted;
-- invalid network values repeat the relevant question;
-- accepted values are exported before `build_container`.
+### Branding test
+
+A renderer-oriented check could validate the generated HTML, required URLs, image paths, ordering after Community Scripts `description()`, and removal of `community-script` from generated tags.
 
 ## PVE Scripts Management retest workflow
 
-When a newer PVE Scripts Management release claims improved custom-repository support:
+When a newer release claims improved custom-repository support:
 
 1. Confirm the installed application version.
-2. Add the public repository URL with branch `main`.
-3. Run its repository-specific synchronization operation, not merely a PocketBase or logo refresh.
-4. Check service logs for requests to this repository.
-5. Verify that `itiligent-guacamole.json` was downloaded locally.
+2. Add the public repository URL using branch `main`.
+3. Run repository-specific synchronization.
+4. Check logs for requests to this repository.
+5. Verify the JSON is downloaded locally.
 6. Verify the card appears in Available Scripts.
-7. Verify selection resolves the local/custom JSON record rather than requiring PocketBase.
-8. Verify both files are downloaded from this repository:
-
-   ```text
-   ct/itiligent-guacamole.sh
-   install/itiligent-guacamole-install.sh
-   ```
-
-9. Verify the management application's local rewrite of the `build.func` source still permits the installer URL interception.
-10. Perform a disposable installation before documenting support as working.
+7. Verify selection resolves the custom record rather than requiring PocketBase.
+8. Verify both launcher and installer download from this repository.
+9. Verify any local `build.func` rewrite still permits installer URL interception.
+10. Perform a disposable installation before documenting support.
 
 ## Operational runbook
 
@@ -681,19 +658,15 @@ bash <(curl -fsSL \
   https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-Use **Default Install** for standard resources plus storage, bridge, DHCP/static IPv4, gateway, and VLAN selection.
+Use **Default Install** for standard resources plus storage, ID, hostname, bridge, DHCP/static IPv4, gateway, and VLAN.
 
-Use **Advanced Install** for the full Community Scripts wizard, including resource sizing, IPv6, DNS, MTU, MAC, SDN, SSH, and container feature settings.
+Use **Advanced Install** for the full Community Scripts wizard, including resource sizing, IPv6, DNS, MTU, MAC, SDN, SSH, and container features.
 
 ### Access
-
-Native fallback URL:
 
 ```text
 http://CONTAINER-IP:8080/guacamole
 ```
-
-Initial credentials:
 
 ```text
 Username: guacadmin
@@ -704,54 +677,56 @@ Change the password immediately.
 
 ### Debugging a failed build
 
-Community Scripts developer flags can be used when compatible with the current builder. A typical diagnostic run is:
+A typical diagnostic run is:
 
 ```bash
 dev_mode="trace,keep,logs" bash -c "$(curl -fsSL \
   https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)"
 ```
 
-The `keep` flag is useful when the failed container must remain available for inspection. Review current Community Scripts documentation before relying on flags because the outer builder is loaded from a moving branch.
+Review current Community Scripts behavior before relying on developer flags.
 
 ### Upgrade testing
 
 Before invoking the upgrade helper:
 
 1. take a Proxmox snapshot or backup;
-2. record the installed Guacamole and upstream adapter versions;
+2. record installed Guacamole and adapter versions;
 3. inspect `/opt/itiligent-guacamole/upgrade-guacamole.sh`;
-4. run the upgrade in a non-production container first;
-5. verify login, RDP, other configured protocols, extensions, and database state;
-6. restore the snapshot if results are not acceptable.
+4. run the upgrade in a nonproduction container first;
+5. verify login, RDP, configured extensions, and database state;
+6. restore the snapshot if needed.
 
-## Completion checklist for future work
+## Completion checklist
 
-Before declaring a change complete:
+Before declaring future work complete:
 
-- [ ] Current `main` and recent pull requests were inspected.
+- [ ] Current `main`, recent commits, and open pull requests were inspected.
 - [ ] Current Community Scripts `build.func` behavior was verified.
-- [ ] The pinned Itiligent source and candidate source were compared when applicable.
+- [ ] The pinned Itiligent source and candidate were compared when applicable.
 - [ ] Required patch markers were checked.
-- [ ] Bash and JSON validation passed.
+- [ ] Bash, JSON, metadata, asset, and hook validation passed.
 - [ ] A disposable LXC installation was performed for runtime changes.
 - [ ] Interactive question visibility was verified.
-- [ ] Default or Advanced network selections were verified when affected.
-- [ ] Proxmox-managed networking, identity, DNS, and firewall were not overridden.
+- [ ] Default or Advanced identity/network selections were verified when affected.
+- [ ] Proxmox-managed identity, networking, DNS, and firewall were preserved.
+- [ ] Summary-panel branding and tags were verified when affected.
+- [ ] Browser cache was ruled out for frontend-only anomalies.
 - [ ] Default credentials and security notes remain visible.
-- [ ] Previously validated RDP behavior was regression-tested when relevant.
-- [ ] Test matrix was updated.
-- [ ] This handoff was updated.
+- [ ] RDP was regression-tested when relevant.
+- [ ] Test matrix, risks, status, and history were updated.
 - [ ] Pull-request and merge details were recorded.
 
 ## Current engineering priorities
 
-The core direct installer works and is on `main`.
+The tested production installer, compact Default flow, branding, and RDP path are on `main`.
 
-The most important next engineering improvements are:
+The most important next improvements are:
 
-1. runtime-test the compact Default network wizard with DHCP and static/VLAN paths;
-2. add checked patch counts so upstream drift fails fast;
-3. add CI tests for the upstream transformation and Default network wizard;
+1. add checked upstream patch counts so drift fails fast;
+2. add automated upstream-transformation and Default-wizard tests;
+3. test SSH and VNC connectivity;
 4. test the remaining optional Itiligent feature matrix;
-5. test the upgrade helper with snapshots;
-6. retest PVE Scripts Management only after its custom-repository flow is demonstrably connected to the active catalogue and download routes.
+5. test backup and upgrade helpers with snapshots;
+6. retest PVE Scripts Management only after its custom-repository flow is demonstrably connected end to end;
+7. test ARM64 before continuing to declare it supported in metadata.
