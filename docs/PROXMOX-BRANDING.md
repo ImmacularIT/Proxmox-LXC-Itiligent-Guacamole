@@ -23,13 +23,15 @@ The panel links to:
 The panel uses these repository-hosted PNG files:
 
 ```text
-assets/itiligent-logo.png
+assets/itiligent-logo-card.png
 assets/immacularit-logo.png
 ```
 
 At installation time, image URLs are built from `PROJECT_OWNER`, `PROJECT_REPO`, and `PROJECT_REF`. This keeps development-branch tests isolated from production assets.
 
 The browser displaying the Proxmox interface must be able to retrieve images from `raw.githubusercontent.com`. Text and links remain available if an external image cannot be loaded.
+
+The Itiligent asset was renamed during testing to avoid a stale or incorrectly served earlier image path.
 
 ## Runtime implementation
 
@@ -68,16 +70,18 @@ remote-access
 
 ## Validation
 
-Repository CI checks that both assets are valid nonempty PNG files and that the launcher contains the branding and tag hooks.
+Repository CI checks that both active assets are valid nonempty PNG files and that the launcher contains the branding and tag hooks.
 
-A real Proxmox installation is still required to confirm:
+Runtime validation on Proxmox VE 9.2.6 confirmed that:
 
-1. both logos render at useful sizes in the Summary panel;
-2. the attribution text is readable in the active Proxmox theme;
-3. all external links open correctly;
-4. the Community Scripts donation, script-page, discussion, and repository links are absent from the final panel;
+1. both logos render in the Summary panel;
+2. the attribution text is readable;
+3. the project links are present;
+4. Community Scripts donation, script-page, discussion, and repository links are absent;
 5. `community-script` is absent from the container tags;
 6. the four project tags are present.
+
+The first test displayed only the Itiligent image alternative text. Replacing the asset under the new `itiligent-logo-card.png` path resolved the issue.
 
 ## Development-branch testing
 
