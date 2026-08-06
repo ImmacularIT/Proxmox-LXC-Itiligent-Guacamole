@@ -5,7 +5,7 @@ source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxV
 # Upstream: https://github.com/itiligent/Easy-Guacamole-Installer
 
 APP="Itiligent-Guacamole"
-var_tags="${var_tags:-webserver;remote}"
+var_tags="${var_tags:-itiligent;guacamole;immacularit;remote-access}"
 var_disk="${var_disk:-8}"
 var_cpu="${var_cpu:-1}"
 var_ram="${var_ram:-2048}"
@@ -17,6 +17,9 @@ var_unprivileged="${var_unprivileged:-1}"
 PROJECT_OWNER="ImmacularIT"
 PROJECT_REPO="Proxmox-Itiligent-Guacamole"
 PROJECT_REF="${ITILIGENT_REPO_REF:-main}"
+UPSTREAM_PROJECT_URL="https://github.com/itiligent/Easy-Guacamole-Installer"
+IMMACULARIT_PROFILE_URL="https://github.com/ImmacularIT"
+PROJECT_URL="https://github.com/${PROJECT_OWNER}/${PROJECT_REPO}"
 
 header_info "$APP"
 variables
@@ -194,11 +197,90 @@ configure_default_network() {
   echo
 }
 
+# Community Scripts adds its own marker tag to every LXC. This project is
+# external, so remove that marker while preserving user-defined tags and ensure
+# the application and maintainer are identifiable in Proxmox.
+configure_project_tags() {
+  local raw_tags="${TAGS:-${var_tags:-}}"
+  local tag cleaned=""
+  local -a existing_tags=()
+  local -a requested_tags=("itiligent" "guacamole" "immacularit" "remote-access")
+
+  IFS=';' read -r -a existing_tags <<<"$raw_tags"
+  for tag in "${existing_tags[@]}" "${requested_tags[@]}"; do
+    tag="${tag//[[:space:]]/}"
+    [[ -z "$tag" || "$tag" == "community-script" ]] && continue
+    case ";${cleaned};" in
+    *";${tag};"*) ;;
+    *) cleaned="${cleaned:+${cleaned};}${tag}" ;;
+    esac
+  done
+
+  TAGS="$cleaned"
+  export TAGS
+}
+
+# The upstream Community Scripts description function performs its normal
+# completion hooks and telemetry. This function replaces only the HTML shown in
+# the Proxmox Summary information box after those hooks have run.
+set_project_description() {
+  local asset_base="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/assets"
+  local project_description
+
+  project_description=$(
+    cat <<EOF_DESCRIPTION
+<div align='center'>
+  <a href='${UPSTREAM_PROJECT_URL}' target='_blank' rel='noopener noreferrer'>
+    <img src='${asset_base}/itiligent-logo.png' alt='Itiligent logo' style='width:180px;max-width:55%;height:auto;' />
+  </a>
+
+  <h2 style='font-size:24px;margin:16px 0 8px;'>Itiligent Guacamole LXC</h2>
+
+  <p style='margin:8px 0;line-height:1.5;'>
+    An unofficial Proxmox LXC adaptation of the
+    <a href='${UPSTREAM_PROJECT_URL}' target='_blank' rel='noopener noreferrer' style='color:#88bf5b;'>Itiligent Easy Guacamole Installer</a>.
+  </p>
+
+  <p style='margin:8px 0 4px;'>Adapted and maintained for Proxmox by</p>
+
+  <a href='${IMMACULARIT_PROFILE_URL}' target='_blank' rel='noopener noreferrer'>
+    <img src='${asset_base}/immacularit-logo.png' alt='ImmacularIT logo' style='width:210px;max-width:60%;height:auto;' />
+  </a>
+
+  <p style='margin:12px 0;'>
+    <a href='${UPSTREAM_PROJECT_URL}' target='_blank' rel='noopener noreferrer'>
+      <img src='https://img.shields.io/badge/Upstream-Itiligent-88BF5B?logo=github&amp;logoColor=white' alt='Itiligent upstream repository' />
+    </a>
+    <a href='${PROJECT_URL}' target='_blank' rel='noopener noreferrer'>
+      <img src='https://img.shields.io/badge/Proxmox%20adaptation-ImmacularIT-29A9E8?logo=github&amp;logoColor=white' alt='ImmacularIT Proxmox adaptation' />
+    </a>
+  </p>
+
+  <span style='margin:0 10px;'>
+    <i class='fa fa-code-fork fa-fw'></i>
+    <a href='${UPSTREAM_PROJECT_URL}' target='_blank' rel='noopener noreferrer' style='text-decoration:none;color:#88bf5b;'>Itiligent GitHub</a>
+  </span>
+  <span style='margin:0 10px;'>
+    <i class='fa fa-github fa-fw'></i>
+    <a href='${PROJECT_URL}' target='_blank' rel='noopener noreferrer' style='text-decoration:none;color:#29a9e8;'>Project GitHub</a>
+  </span>
+  <span style='margin:0 10px;'>
+    <i class='fa fa-exclamation-circle fa-fw'></i>
+    <a href='${PROJECT_URL}/issues' target='_blank' rel='noopener noreferrer' style='text-decoration:none;color:#29a9e8;'>Issues</a>
+  </span>
+</div>
+EOF_DESCRIPTION
+  )
+
+  pct set "$CTID" -description "$project_description"
+}
+
 _PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"
 _COMMUNITY_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
 
 start
 configure_default_network
+configure_project_tags
 
 # Community Scripts resolves the installer from its own repository. Intercept
 # only that URL so the normal container builder can use this project's installer.
@@ -224,6 +306,7 @@ curl() {
 build_container
 unset -f curl
 description
+set_project_description
 
 msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
