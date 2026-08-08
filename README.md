@@ -59,7 +59,7 @@ For the complete implementation history, known quirks, test matrix, upstream-upd
 Run this command as `root` in the Proxmox host shell:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
 **Default Install** keeps the normal resource defaults and adds compact choices for:

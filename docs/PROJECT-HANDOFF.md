@@ -1,12 +1,15 @@
 # Project Technical Handoff and Maintenance Workflow
 
-This document records the implementation, design decisions, test results, known limitations, failures encountered, and maintenance workflow for `ImmacularIT/Proxmox-Itiligent-Guacamole`.
+This document records the implementation, design decisions, test results, known limitations, failures encountered, and maintenance workflow for `ImmacularIT/Proxmox-LXC-Itiligent-Guacamole`.
 
-**Status snapshot:** 2026-08-06  
+**Status snapshot:** 2026-08-08  
 **Production branch:** `main`  
+**Repository:** `ImmacularIT/Proxmox-LXC-Itiligent-Guacamole`  
 **Production merge:** PR #6, commit `83bd61e0fee014f7b65604078b3a5c03fd9efd0e`  
 **Test platform:** Proxmox VE 9.2.6, unprivileged Debian 13 LXC  
 **Pinned Itiligent revision:** `676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce`
+
+The repository was renamed from `Proxmox-Itiligent-Guacamole` to `Proxmox-LXC-Itiligent-Guacamole` on 2026-08-08 to make its LXC purpose explicit. All current launcher, metadata, documentation, branding, and installation URLs use the new repository name.
 
 Always inspect the current repository state and upstream sources before making changes. The Community Scripts framework and Itiligent source may have changed since this snapshot.
 
@@ -20,7 +23,7 @@ The tested production installation method is:
 
 ```bash
 bash <(curl -fsSL \
-  https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
+  https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
 The validated production path includes:
@@ -56,7 +59,7 @@ The following boundaries are intentional:
 
 ```text
 .github/workflows/syntax.yml
-    Bash, JSON, metadata-path, asset, and launcher-hook validation.
+    Bash, JSON, metadata-path, asset, launcher-hook, and repository-reference validation.
 
 assets/itiligent-logo.png
 assets/itiligent-logo-card.png
@@ -194,7 +197,7 @@ The final Proxmox Summary panel:
 - states that this is an unofficial Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer;
 - displays the ImmacularIT logo;
 - credits ImmacularIT as adaptation maintainer;
-- links to the Itiligent repository, the ImmacularIT profile, this project repository, and its issue tracker;
+- links to the Itiligent repository, the ImmacularIT profile, `https://github.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole`, and its issue tracker;
 - omits Community Scripts donation, script-page, discussion, and repository links.
 
 The standard Community Scripts `description()` function must run first so its completion hooks remain intact. `set_project_description()` must run afterward so the project-specific HTML remains visible.
@@ -388,7 +391,8 @@ Maintenance implication: after reinstalling or upgrading Guacamole, use a hard r
 - expected slug and CT type;
 - existence of metadata-derived launcher and installer paths;
 - valid nonempty PNG signatures for the branding assets;
-- presence of Default identity/network, branding, and tag hooks in the launcher.
+- presence of Default identity/network, branding, and tag hooks in the launcher;
+- the active repository name and absence of stale legacy repository references in tracked text/configuration files.
 
 The workflow does not yet:
 
@@ -478,6 +482,12 @@ The compact wizards depend on:
 
 The compact path does not expose Proxmox SDN vnets, IPv6, DNS, MTU, MAC address, SSH settings, or uncommon container features. Use Advanced Install for those.
 
+### Repository rename references
+
+The launcher builds raw GitHub asset and installer URLs from `PROJECT_OWNER`, `PROJECT_REPO`, and `PROJECT_REF`. A future repository rename therefore requires updating `PROJECT_REPO`, user-facing installation URLs, metadata repository URLs, branding documentation, and the technical handoff together.
+
+Repository validation should fail if the legacy repository name reappears in tracked text/configuration files.
+
 ### Silent upstream patch misses
 
 Several Python substitutions use `re.sub()` or `str.replace()` without verifying the number of matches. An upstream text change can therefore cause a patch to stop applying without an immediate, specific error.
@@ -541,6 +551,8 @@ Relevant milestones:
 - PR #5 / `d122e8d9a09d3bdcf484c59eb1a855dccdea3adc` — removed unrelated outreach and authorship-oriented material from the handoff.
 - `0e6a0b0701a93f7cef8265c677dd38a714e6e133` — added the compact Default network wizard.
 - PR #6 / `83bd61e0fee014f7b65604078b3a5c03fd9efd0e` — merged compact Default identity/networking, project branding, assets, tags, validation, and final runtime-test documentation.
+- PR #7 / `15c268e6fd0e6f9b441aa9f785c278c3f580171b` — finalized the technical handoff after production validation.
+- `526f86b7e8fd8b3f2a8cff9f6c148454b9198eaf` — updated the README project title after the repository was renamed to `Proxmox-LXC-Itiligent-Guacamole`.
 
 The supported launcher and installer paths are under `ct/` and `install/`.
 
@@ -637,7 +649,7 @@ A renderer-oriented check could validate the generated HTML, required URLs, imag
 When a newer release claims improved custom-repository support:
 
 1. Confirm the installed application version.
-2. Add the public repository URL using branch `main`.
+2. Add the public repository URL `https://github.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole` using branch `main`.
 3. Run repository-specific synchronization.
 4. Check logs for requests to this repository.
 5. Verify the JSON is downloaded locally.
@@ -655,7 +667,7 @@ Run as root on the Proxmox host:
 
 ```bash
 bash <(curl -fsSL \
-  https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
+  https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
 Use **Default Install** for standard resources plus storage, ID, hostname, bridge, DHCP/static IPv4, gateway, and VLAN.
@@ -681,7 +693,7 @@ A typical diagnostic run is:
 
 ```bash
 dev_mode="trace,keep,logs" bash -c "$(curl -fsSL \
-  https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)"
+  https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)"
 ```
 
 Review current Community Scripts behavior before relying on developer flags.
@@ -705,7 +717,7 @@ Before declaring future work complete:
 - [ ] Current Community Scripts `build.func` behavior was verified.
 - [ ] The pinned Itiligent source and candidate were compared when applicable.
 - [ ] Required patch markers were checked.
-- [ ] Bash, JSON, metadata, asset, and hook validation passed.
+- [ ] Bash, JSON, metadata, asset, hook, and repository-reference validation passed.
 - [ ] A disposable LXC installation was performed for runtime changes.
 - [ ] Interactive question visibility was verified.
 - [ ] Default or Advanced identity/network selections were verified when affected.
