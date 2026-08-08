@@ -36,17 +36,24 @@ assert 'configure_default_container_storage' in launcher
 assert 'configure_default_network' in launcher
 assert 'set_project_description' in launcher
 
-# The normal interactive entry path is project-owned. It presents useful
-# project/privacy context and exposes only Default and Advanced installation
-# modes, then hands the selected preset to the unchanged framework machinery.
+# The normal interactive entry path is project-owned. The Welcome screen carries
+# the explanatory information; the following chooser intentionally mirrors the
+# compact NPM layout with only the two mode names visible.
 assert 'PROJECT_DISPLAY_NAME="Itiligent Guacamole LXC"' in launcher
 assert 'show_project_welcome() {' in launcher
 assert 'select_project_install_mode() {' in launcher
 assert 'Privacy: this installer does not send telemetry or diagnostics.' in launcher
-assert 'Default Install - recommended guided setup with standard resources' in launcher
-assert 'Advanced Install - full Proxmox container configuration' in launcher
-assert 'mode="default"' in launcher
-assert 'mode="advanced"' in launcher
+project_menu = launcher.split('select_project_install_mode() {', 1)[1].split('prepare_latest_debian_template() {', 1)[0]
+assert '--title "INSTALL OPTIONS"' in project_menu
+assert '--ok-button "Select" --cancel-button "Exit Script"' in project_menu
+assert '--menu "\\nChoose an option:" 14 62 2' in project_menu
+assert '"Default Install" ""' in project_menu
+assert '"Advanced Install" ""' in project_menu
+assert '--default-item "Default Install"' in project_menu
+assert '"Default Install") mode="default"' in project_menu
+assert '"Advanced Install") mode="advanced"' in project_menu
+assert 'recommended guided setup with standard resources' not in project_menu
+assert 'full Proxmox container configuration' not in project_menu
 selector = 'select_project_install_mode "${1:-}"'
 assert selector in launcher
 assert launcher.index(selector) < launcher.index('\nstart\n')
@@ -75,7 +82,6 @@ assert positions == sorted(positions), "Default storage/network/template flow is
 
 # User Defaults and Settings remain internal compatibility capabilities only;
 # they are not options in the project-owned normal installation mode menu.
-project_menu = launcher.split('select_project_install_mode() {', 1)[1].split('function update_script()', 1)[0]
 assert 'User Defaults' not in project_menu
 assert 'Edit Default.vars' not in project_menu
 assert 'Edit App.vars' not in project_menu
@@ -116,4 +122,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer, project entry UI, Default storage, and hardened neutral locale invariants validated.")
+print("Telemetry-free installer, clean project entry UI, Default storage, and hardened neutral locale invariants validated.")
