@@ -30,11 +30,32 @@ for forbidden in [
 assert 'diagnostics_check() {' in launcher
 assert 'get_header() { return 0; }' in launcher
 assert 'settings_menu() {' in launcher
-assert '"Default Install"' not in launcher or 'start' in launcher
 assert 'build_container' in launcher
 assert 'configure_default_identity' in launcher
 assert 'configure_default_network' in launcher
 assert 'set_project_description' in launcher
+
+# The normal interactive entry path is project-owned. It presents useful
+# project/privacy context and exposes only Default and Advanced installation
+# modes, then hands the selected preset to the unchanged framework machinery.
+assert 'PROJECT_DISPLAY_NAME="Itiligent Guacamole LXC"' in launcher
+assert 'show_project_welcome() {' in launcher
+assert 'select_project_install_mode() {' in launcher
+assert 'Privacy: this installer does not send telemetry or diagnostics.' in launcher
+assert 'Default Install - recommended guided setup with standard resources' in launcher
+assert 'Advanced Install - full Proxmox container configuration' in launcher
+assert 'mode="default"' in launcher
+assert 'mode="advanced"' in launcher
+selector = 'select_project_install_mode "${1:-}"'
+assert selector in launcher
+assert launcher.index(selector) < launcher.index('\nstart\n')
+
+# User Defaults and Settings remain internal compatibility capabilities only;
+# they are not options in the project-owned normal installation mode menu.
+project_menu = launcher.split('select_project_install_mode() {', 1)[1].split('function update_script()', 1)[0]
+assert 'User Defaults' not in project_menu
+assert 'Edit Default.vars' not in project_menu
+assert 'Edit App.vars' not in project_menu
 
 # Container-side DNS checks must be limited to the actual GitHub hosts needed by
 # this project, and the generated update helper must return to this repository.
@@ -45,9 +66,9 @@ assert "sed -i '/community-scripts/d' /etc/profile.d/00_lxc-details.sh" in insta
 assert 'rm -f /usr/local/community-scripts/diagnostics' in installer
 
 # Preserve the exact pinned Itiligent release and normal project adaptation
-# flow; this privacy cleanup must not silently switch upstream versions.
+# flow; this privacy/UI cleanup must not silently switch upstream versions.
 assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer invariants validated.")
+print("Telemetry-free installer and project entry UI invariants validated.")
