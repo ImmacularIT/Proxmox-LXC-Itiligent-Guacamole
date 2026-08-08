@@ -80,6 +80,17 @@ assert 'User Defaults' not in project_menu
 assert 'Edit Default.vars' not in project_menu
 assert 'Edit App.vars' not in project_menu
 
+# Fresh Debian containers can inherit host regional LC_* values before those
+# locales exist in the guest. Match the NPM adaptation by forcing Debian's
+# always-available neutral UTF-8 locale for the installation process, and do so
+# before the helper library or any child installation scripts are executed.
+assert 'export LANG=C.UTF-8' in installer
+assert 'export LC_ALL=C.UTF-8' in installer
+helper_source = 'source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"'
+assert helper_source in installer
+assert installer.index('export LANG=C.UTF-8') < installer.index(helper_source)
+assert installer.index('export LC_ALL=C.UTF-8') < installer.index(helper_source)
+
 # Container-side DNS checks must be limited to the actual GitHub hosts needed by
 # this project, and the generated update helper must return to this repository.
 assert 'GIT_HOSTS=("github.com" "raw.githubusercontent.com" "api.github.com")' in installer
@@ -94,4 +105,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer, project entry UI, and Default storage invariants validated.")
+print("Telemetry-free installer, project entry UI, Default storage, and neutral locale invariants validated.")
