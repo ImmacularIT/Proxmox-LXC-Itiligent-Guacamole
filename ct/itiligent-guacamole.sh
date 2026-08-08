@@ -21,10 +21,84 @@ UPSTREAM_PROJECT_URL="https://github.com/itiligent/Easy-Guacamole-Installer"
 IMMACULARIT_PROFILE_URL="https://github.com/ImmacularIT"
 PROJECT_URL="https://github.com/${PROJECT_OWNER}/${PROJECT_REPO}"
 
+# The external Proxmox helper framework is retained only for its proven
+# container-creation mechanics. This project does not participate in its
+# diagnostics/telemetry service and does not expose its branding in dialogs.
+DIAGNOSTICS="no"
+export DIAGNOSTICS
+post_to_api() { return 0; }
+post_progress_to_api() { return 0; }
+post_update_to_api() { return 0; }
+telemetry_new_attempt() { return 0; }
+diagnostics_check() {
+  DIAGNOSTICS="no"
+  export DIAGNOSTICS
+  return 0
+}
+diagnostics_menu() { return 0; }
+
+# Keep the established Default/Advanced framework dialogs and behavior, but
+# present them as part of this ImmacularIT installer rather than with unrelated
+# framework branding.
+whiptail() {
+  local arg
+  local -a rewritten=()
+  for arg in "$@"; do
+    arg="${arg//Proxmox VE Helper Scripts/ImmacularIT - ${APP}}"
+    arg="${arg//Community-Scripts Options/${APP} Options}"
+    arg="${arg//Community-Scripts SETTINGS Menu/${APP} Settings}"
+    rewritten+=("$arg")
+  done
+  command whiptail "${rewritten[@]}"
+}
+
+# Preserve the existing settings editor except for the diagnostics/telemetry
+# option, which is intentionally unsupported by this project.
+settings_menu() {
+  local choice
+  while true; do
+    if [ -f "$(get_app_defaults_path)" ]; then
+      choice=$(whiptail \
+        --backtitle "ImmacularIT - ${APP}" \
+        --title "${APP} Settings" \
+        --ok-button "Select" --cancel-button "Exit Script" \
+        --menu "\nChoose a settings option:" 18 60 6 \
+        "1" "Edit Default.vars" \
+        "2" "Edit App.vars for ${APP}" \
+        "3" "Back to Main Menu" \
+        3>&1 1>&2 2>&3) || exit_script
+      case "$choice" in
+      1) ${EDITOR:-nano} /usr/local/community-scripts/default.vars ;;
+      2) ${EDITOR:-nano} "$(get_app_defaults_path)" ;;
+      3) return ;;
+      esac
+    else
+      choice=$(whiptail \
+        --backtitle "ImmacularIT - ${APP}" \
+        --title "${APP} Settings" \
+        --ok-button "Select" --cancel-button "Exit Script" \
+        --menu "\nChoose a settings option:" 16 60 5 \
+        "1" "Edit Default.vars" \
+        "2" "Back to Main Menu" \
+        3>&1 1>&2 2>&3) || exit_script
+      case "$choice" in
+      1) ${EDITOR:-nano} /usr/local/community-scripts/default.vars ;;
+      2) return ;;
+      esac
+    fi
+  done
+}
+
 header_info "$APP"
 variables
 color
 catch_errors
+
+# variables() belongs to the external framework and resets DIAGNOSTICS to its
+# own safe default. Reassert the project policy after initialization so neither
+# saved host preferences nor later framework changes can opt this installer in.
+DIAGNOSTICS="no"
+export DIAGNOSTICS
 
 function update_script() {
   header_info
@@ -230,7 +304,7 @@ EOF_DESCRIPTION
 }
 
 _PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"
-_COMMUNITY_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
+_FRAMEWORK_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
 
 start
 configure_default_identity
@@ -242,7 +316,7 @@ curl() {
   local token="${GITHUB_TOKEN:-${var_github_token:-}}"
   local -a rewritten=()
   for arg in "$@"; do
-    if [[ "$arg" == "$_COMMUNITY_INSTALL_URL" ]]; then
+    if [[ "$arg" == "$_FRAMEWORK_INSTALL_URL" ]]; then
       rewritten+=("$_PROJECT_INSTALL_URL")
       project_fetch=1
     else
