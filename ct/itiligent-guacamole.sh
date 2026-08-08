@@ -291,6 +291,52 @@ configure_default_identity() {
   export CT_ID CTID HN
 }
 
+configure_default_container_storage() {
+  [[ "${METHOD:-}" == "default" ]] || return 0
+  if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
+    return 0
+  fi
+
+  local storage selected default_storage found=0
+  local -a stores=() storage_menu=()
+
+  mapfile -t stores < <(pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+  if [[ ${#stores[@]} -eq 0 ]]; then
+    msg_error "No active Proxmox storage supports LXC root disks"
+    exit 116
+  fi
+
+  default_storage="${CONTAINER_STORAGE:-${var_container_storage:-${stores[0]}}}"
+  for storage in "${stores[@]}"; do
+    [[ "$storage" == "$default_storage" ]] && found=1
+  done
+  [[ "$found" -eq 1 ]] || default_storage="${stores[0]}"
+
+  for storage in "${stores[@]}"; do
+    if [[ "$storage" == "$default_storage" ]]; then
+      storage_menu+=("$storage" "Current default")
+    else
+      storage_menu+=("$storage" "Active container storage")
+    fi
+  done
+
+  selected=$(whiptail \
+    --backtitle "ImmacularIT - ${APP}" \
+    --title "DEFAULT INSTALL: STORAGE" \
+    --ok-button "Next" --cancel-button "Exit Script" \
+    --menu "\nSelect storage for the LXC root disk:" 18 72 10 \
+    "${storage_menu[@]}" \
+    --default-item "$default_storage" 3>&1 1>&2 2>&3) || exit_script
+
+  CONTAINER_STORAGE="$selected"
+  var_container_storage="$selected"
+  export CONTAINER_STORAGE var_container_storage
+
+  header_info
+  echo -e "${STORAGE}${BOLD}${DGN}Container Storage: ${BGN}${CONTAINER_STORAGE}${CL}"
+  echo
+}
+
 configure_default_network() {
   [[ "${METHOD:-}" == "default" ]] || return 0
   if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
@@ -435,9 +481,10 @@ _FRAMEWORK_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/Prox
 
 select_project_install_mode "${1:-}"
 start
-prepare_latest_debian_template
 configure_default_identity
+configure_default_container_storage
 configure_default_network
+prepare_latest_debian_template
 configure_project_tags
 
 curl() {
