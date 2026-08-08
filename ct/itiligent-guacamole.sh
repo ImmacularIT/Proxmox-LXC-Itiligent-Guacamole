@@ -37,6 +37,11 @@ diagnostics_check() {
 }
 diagnostics_menu() { return 0; }
 
+# The framework has no project-specific header for this application. Avoid its
+# fallback network request (and the resulting unrelated URL warning) while
+# preserving header_info's normal clear-screen behavior.
+get_header() { return 0; }
+
 # Keep the established Default/Advanced framework dialogs and behavior, but
 # present them as part of this ImmacularIT installer rather than with unrelated
 # framework branding.
@@ -44,6 +49,7 @@ whiptail() {
   local arg
   local -a rewritten=()
   for arg in "$@"; do
+    arg="${arg//Proxmox VE Helper Scripts - ${APP}/ImmacularIT - ${APP}}"
     arg="${arg//Proxmox VE Helper Scripts/ImmacularIT - ${APP}}"
     arg="${arg//Community-Scripts Options/${APP} Options}"
     arg="${arg//Community-Scripts SETTINGS Menu/${APP} Settings}"
