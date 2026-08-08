@@ -6,7 +6,7 @@ A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://
 
 ## Scope
 
-This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Community Scripts-style Proxmox container installation:
+This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Proxmox helper-framework container installation:
 
 - Debian 13 LXC on Proxmox VE 9
 - installation runs as root inside the container
@@ -32,6 +32,14 @@ The upstream Itiligent suite is pinned to commit `676eb7e2711dabdf7f33fa7fe91eaf
 - existing SMTP relay, guacd TLS, fail2ban, and upgrade helper scripts
 
 No additional Guacamole functions are introduced by this project.
+
+## Installer privacy and project identity
+
+The existing external Proxmox helper framework is retained only for its established container-creation mechanics so Default and Advanced Install behavior does not have to be rewritten. This project hard-disables the framework's diagnostics and telemetry reporting on both the Proxmox host and inside the LXC.
+
+The installer does not offer a telemetry/diagnostics preference, does not report installation progress or results to the external framework service, and does not require its diagnostics DNS endpoint. User-facing installer dialogs use ImmacularIT/Itiligent project identity instead of unrelated framework branding.
+
+Inside the completed container, the login profile does not display external-framework promotional attribution and `/usr/bin/update` points back to this ImmacularIT repository.
 
 ## Validation status
 
@@ -74,13 +82,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itil
 
 Pressing Enter in the container ID and hostname fields accepts the suggested values.
 
-Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
+Use **Advanced Install** for the full advanced Proxmox configuration wizard provided by the retained helper framework, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
 The container setup is followed by the original interactive Itiligent configuration menus.
 
 ## Proxmox container information panel
 
-New containers receive a project-specific description in the Proxmox VE Summary panel rather than the standard Community Scripts promotional panel.
+New containers receive a project-specific description in the Proxmox VE Summary panel rather than a generic external-framework promotional panel.
 
 The panel:
 
@@ -88,7 +96,7 @@ The panel:
 - identifies this project as an unofficial Proxmox LXC adaptation;
 - displays the ImmacularIT logo and links to the maintainer profile;
 - links to this adaptation repository and its issue tracker;
-- omits Community Scripts donation, script-page, discussion, and repository links.
+- omits unrelated framework donation, script-page, discussion, and repository links.
 
 The associated Proxmox tags are:
 
@@ -99,7 +107,7 @@ immacularit
 remote-access
 ```
 
-The automatic `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
+The automatic legacy-framework `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
 
 Branding assets used by the panel are stored in:
 
@@ -112,7 +120,7 @@ Implementation and validation details are documented in [Proxmox Container Brand
 
 ## PVE Scripts Management status
 
-This repository includes Community-style metadata and conventional paths:
+This repository includes conventional PVE Scripts Management metadata and paths:
 
 ```text
 json/itiligent-guacamole.json
@@ -155,4 +163,4 @@ After replacing an older Guacamole installation at the same URL, use a hard refr
 
 ## Attribution
 
-The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The LXC launcher uses the Community Scripts Proxmox VE framework for container creation. See the source repositories for their respective licenses and attribution.
+The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The launcher retains an external Proxmox VE helper framework for container-creation mechanics only; its diagnostics and telemetry are disabled by this project and its user-facing branding is replaced. See the source repositories for their respective licenses and attribution.
