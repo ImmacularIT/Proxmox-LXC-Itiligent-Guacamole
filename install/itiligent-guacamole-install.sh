@@ -73,8 +73,8 @@ project_network_check() {
 }
 
 # Keep the established OS-update, proxy, APT cacher, and mirror fallback
-# behavior. The generic tools library downloaded afterward is not used by this
-# Itiligent installer, so omit that unrelated framework download.
+# behavior. The generic tools library downloaded afterward is not required by
+# this installer, so omit that unrelated framework download.
 project_update_os() {
   msg_info "Updating Container OS"
   configure_http_proxy
@@ -131,7 +131,8 @@ mkdir -p "$INSTALL_DIR" /var/backups/guacamole
 chmod 700 "$INSTALL_DIR" /var/backups/guacamole
 
 msg_info "Downloading pinned Itiligent installer"
-curl_download "$SETUP_SCRIPT" "${UPSTREAM_BASE}/1-setup.sh"
+curl -fsSL --retry 3 --retry-delay 2 "${UPSTREAM_BASE}/1-setup.sh" -o "$SETUP_SCRIPT"
+[[ -s "$SETUP_SCRIPT" ]] || fatal "Downloaded an empty Itiligent setup script"
 chmod 700 "$SETUP_SCRIPT"
 msg_ok "Downloaded pinned Itiligent installer"
 
