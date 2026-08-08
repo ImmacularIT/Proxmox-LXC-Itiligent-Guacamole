@@ -102,3 +102,5 @@ jobs:
           for marker in required_markers:
               assert marker in launcher, f"Missing launcher marker: {marker}"
           PY
+      - name: Validate telemetry-free installer invariants
+        run: python3 tests/validate_privacy_invariants.py
