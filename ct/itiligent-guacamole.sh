@@ -17,6 +17,7 @@ var_unprivileged="${var_unprivileged:-1}"
 PROJECT_OWNER="ImmacularIT"
 PROJECT_REPO="Proxmox-LXC-Itiligent-Guacamole"
 PROJECT_REF="${ITILIGENT_REPO_REF:-main}"
+PROJECT_DISPLAY_NAME="Itiligent Guacamole LXC"
 UPSTREAM_PROJECT_URL="https://github.com/itiligent/Easy-Guacamole-Installer"
 IMMACULARIT_PROFILE_URL="https://github.com/ImmacularIT"
 PROJECT_URL="https://github.com/${PROJECT_OWNER}/${PROJECT_REPO}"
@@ -59,7 +60,8 @@ whiptail() {
 }
 
 # Preserve the existing settings editor except for the diagnostics/telemetry
-# option, which is intentionally unsupported by this project.
+# option, which is intentionally unsupported by this project. It is retained
+# only for explicit compatibility modes and is not shown by the normal launcher.
 settings_menu() {
   local choice
   while true; do
@@ -105,6 +107,46 @@ catch_errors
 # saved host preferences nor later framework changes can opt this installer in.
 DIAGNOSTICS="no"
 export DIAGNOSTICS
+
+show_project_welcome() {
+  whiptail \
+    --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
+    --title "WELCOME" \
+    --ok-button "Continue" --cancel-button "Exit" \
+    --msgbox "\n${PROJECT_DISPLAY_NAME}\n\nProxmox VE LXC adaptation of the Itiligent Easy Guacamole Installer, maintained by ImmacularIT.\n\nDefault container profile:\n  - Debian 13\n  - Unprivileged LXC\n  - 1 CPU / 2048 MiB RAM / 8 GB disk\n\nAfter the LXC is created, the original interactive Itiligent setup lets you choose the database, authentication extensions, Nginx, TLS and other Guacamole options.\n\nProxmox remains responsible for container identity, networking and firewall policy.\n\nPrivacy: this installer does not send telemetry or diagnostics." 27 76 || exit_script
+}
+
+select_project_install_mode() {
+  local requested_mode="${1:-}"
+  local choice
+
+  # The same ct script is also used by the in-container update path. Only show
+  # the installation UI on a Proxmox host, with an interactive terminal, and
+  # when no explicit framework mode was supplied by the caller.
+  command -v pveversion >/dev/null 2>&1 || return 0
+  [[ -n "${mode:-}" || -n "$requested_mode" ]] && return 0
+  if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
+    return 0
+  fi
+
+  ensure_whiptail
+  show_project_welcome
+
+  choice=$(whiptail \
+    --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
+    --title "INSTALLATION MODE" \
+    --ok-button "Select" --cancel-button "Exit" \
+    --menu "\nChoose how you want to configure the Proxmox container:" 17 76 2 \
+    "1" "Default Install - recommended guided setup with standard resources" \
+    "2" "Advanced Install - full Proxmox container configuration" \
+    3>&1 1>&2 2>&3) || exit_script
+
+  case "$choice" in
+  1) mode="default" ;;
+  2) mode="advanced" ;;
+  *) exit_script ;;
+  esac
+}
 
 function update_script() {
   header_info
@@ -312,6 +354,7 @@ EOF_DESCRIPTION
 _PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"
 _FRAMEWORK_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
 
+select_project_install_mode "${1:-}"
 start
 configure_default_identity
 configure_default_network
