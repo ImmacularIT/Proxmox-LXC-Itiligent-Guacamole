@@ -15,7 +15,7 @@ var_arm64="${var_arm64:-yes}"
 var_unprivileged="${var_unprivileged:-1}"
 
 PROJECT_OWNER="ImmacularIT"
-PROJECT_REPO="Proxmox-Itiligent-Guacamole"
+PROJECT_REPO="Proxmox-LXC-Itiligent-Guacamole"
 PROJECT_REF="${ITILIGENT_REPO_REF:-main}"
 UPSTREAM_PROJECT_URL="https://github.com/itiligent/Easy-Guacamole-Installer"
 IMMACULARIT_PROFILE_URL="https://github.com/ImmacularIT"
