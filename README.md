@@ -43,6 +43,19 @@ The normal interactive launcher begins with a project-owned Welcome screen follo
 
 Inside the completed container, the login profile does not display external-framework promotional attribution and `/usr/bin/update` points back to this ImmacularIT repository.
 
+## Debian template freshness
+
+For Debian 13 AMD64 installations, the launcher refreshes the official Proxmox appliance catalog after the normal installation mode and storage selection has completed and before the LXC is created. The selected Proxmox template storage is preserved; only the image freshness behavior is tightened.
+
+The launcher selects the newest catalog image matching `debian-13-standard_*_amd64.tar.zst` and behaves as follows:
+
+- if no Debian 13 image is cached on the selected template storage, the current catalog image is downloaded automatically;
+- if the cached image is older, the newer catalog image is downloaded automatically and used for the new container;
+- if the current image is already cached, it is reused without another download;
+- if a cached image is somehow newer than the current catalog entry, it is retained rather than downgraded.
+
+Older cached templates are not deleted automatically. ARM64 continues to use the retained helper framework's existing ARM64 template handling and is not changed by this AMD64 freshness pass.
+
 ## Validation status
 
 The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
@@ -60,7 +73,7 @@ Default Install was tested successfully with:
 
 An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
 
-Those runtime results predate the telemetry/privacy and Welcome-screen cleanup on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`.
+Those runtime results predate the telemetry/privacy cleanup, Welcome-screen simplification, and deterministic Debian-template freshness behavior on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`; the Default Install should also confirm the refreshed-template path.
 
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
@@ -74,7 +87,7 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, and telemetry-free policy. The next screen contains only:
+For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, automatic Debian 13 AMD64 template freshness, and telemetry-free policy. The next screen contains only:
 
 - **Default Install** — recommended guided setup using the standard 1 CPU, 2048 MiB RAM, 8 GB disk, Debian 13, unprivileged profile;
 - **Advanced Install** — the full advanced Proxmox container configuration path.
@@ -93,7 +106,7 @@ Pressing Enter in the container ID and hostname fields accepts the suggested val
 
 Use **Advanced Install** for the full advanced Proxmox configuration wizard provided by the retained helper framework, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
-The container setup is followed by the original interactive Itiligent configuration menus.
+After the existing Proxmox template storage has been resolved, the launcher refreshes the appliance catalog and ensures the newest Debian 13 AMD64 standard image is available on that storage before container creation. The container setup is then followed by the original interactive Itiligent configuration menus.
 
 ## Proxmox container information panel
 
