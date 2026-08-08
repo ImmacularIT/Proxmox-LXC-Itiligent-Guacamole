@@ -3,6 +3,14 @@
 # License: MIT
 # Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer.
 
+# Debian's C.UTF-8 locale is always available in the minimal container. Use it
+# only for this installation process so inherited Proxmox host LC_* values (for
+# example sv_SE.UTF-8 before that locale exists in the guest) cannot trigger
+# noisy Perl/locale warnings. This does not change the container's configured
+# regional locale or timezone.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 
 # The outer container builder supplies its helper library through
