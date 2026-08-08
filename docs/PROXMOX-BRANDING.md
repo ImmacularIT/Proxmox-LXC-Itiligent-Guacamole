@@ -16,7 +16,8 @@ The panel links to:
 
 - the upstream Itiligent repository: `https://github.com/itiligent/Easy-Guacamole-Installer`;
 - the ImmacularIT GitHub profile: `https://github.com/ImmacularIT`;
-- this adaptation repository and its issue tracker.
+- this adaptation repository: `https://github.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole`;
+- this adaptation repository's issue tracker.
 
 ## Assets
 
@@ -88,8 +89,8 @@ The first test displayed only the Itiligent image alternative text. Replacing th
 When testing a branch whose assets have not been merged into `main`, set `ITILIGENT_REPO_REF` to that branch. For example:
 
 ```bash
-ITILIGENT_REPO_REF=agent/default-network-wizard bash <(curl -fsSL \
-  https://raw.githubusercontent.com/ImmacularIT/Proxmox-Itiligent-Guacamole/agent/default-network-wizard/ct/itiligent-guacamole.sh)
+ITILIGENT_REPO_REF=<branch-name> bash <(curl -fsSL \
+  https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/<branch-name>/ct/itiligent-guacamole.sh)
 ```
 
-Without that environment variable, `PROJECT_REF` defaults to `main`, so the installer and branding assets would be requested from the production branch.
+Without that environment variable, `PROJECT_REF` defaults to `main`, so the installer and branding assets are requested from the production branch.
