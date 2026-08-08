@@ -32,6 +32,7 @@ assert 'get_header() { return 0; }' in launcher
 assert 'settings_menu() {' in launcher
 assert 'build_container' in launcher
 assert 'configure_default_identity' in launcher
+assert 'configure_default_container_storage' in launcher
 assert 'configure_default_network' in launcher
 assert 'set_project_description' in launcher
 
@@ -49,6 +50,28 @@ assert 'mode="advanced"' in launcher
 selector = 'select_project_install_mode "${1:-}"'
 assert selector in launcher
 assert launcher.index(selector) < launcher.index('\nstart\n')
+
+# Default Install must always expose the root-disk storage chooser instead of
+# silently inheriting a saved framework default. The current/saved storage may
+# be preselected, but the user's selection must be exported before creation.
+storage_fn = launcher.split('configure_default_container_storage() {', 1)[1].split('configure_default_network() {', 1)[0]
+assert 'pvesm status --content rootdir' in storage_fn
+assert 'DEFAULT INSTALL: STORAGE' in storage_fn
+assert 'Select storage for the LXC root disk:' in storage_fn
+assert 'CONTAINER_STORAGE="$selected"' in storage_fn
+assert 'var_container_storage="$selected"' in storage_fn
+assert 'export CONTAINER_STORAGE var_container_storage' in storage_fn
+
+flow_markers = [
+    'configure_default_identity\n',
+    'configure_default_container_storage\n',
+    'configure_default_network\n',
+    'prepare_latest_debian_template\n',
+    'configure_project_tags\n',
+    '\nbuild_container\n',
+]
+positions = [launcher.index(marker) for marker in flow_markers]
+assert positions == sorted(positions), "Default storage/network/template flow is out of order"
 
 # User Defaults and Settings remain internal compatibility capabilities only;
 # they are not options in the project-owned normal installation mode menu.
@@ -71,4 +94,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer and project entry UI invariants validated.")
+print("Telemetry-free installer, project entry UI, and Default storage invariants validated.")
