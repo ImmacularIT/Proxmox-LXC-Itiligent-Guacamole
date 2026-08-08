@@ -113,7 +113,7 @@ show_project_welcome() {
     --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
     --title "WELCOME" \
     --ok-button "Continue" --cancel-button "Exit" \
-    --msgbox "\n${PROJECT_DISPLAY_NAME}\n\nProxmox VE LXC adaptation of the Itiligent Easy Guacamole Installer, maintained by ImmacularIT.\n\nDefault container profile:\n  - Debian 13\n  - Unprivileged LXC\n  - 1 CPU / 2048 MiB RAM / 8 GB disk\n\nAfter the LXC is created, the original interactive Itiligent setup lets you choose the database, authentication extensions, Nginx, TLS and other Guacamole options.\n\nProxmox remains responsible for container identity, networking and firewall policy.\n\nPrivacy: this installer does not send telemetry or diagnostics." 27 76 || exit_script
+    --msgbox "\n${PROJECT_DISPLAY_NAME}\n\nProxmox VE LXC adaptation of the Itiligent Easy Guacamole Installer, maintained by ImmacularIT.\n\nDefault container profile:\n  - Debian 13\n  - Unprivileged LXC\n  - 1 CPU / 2048 MiB RAM / 8 GB disk\n\nBefore container creation, the official Proxmox appliance catalog is refreshed. The current Debian 13 AMD64 image is downloaded automatically when missing or when the cached image is older.\n\nAfter the LXC is created, the original interactive Itiligent setup lets you choose the database, authentication extensions, Nginx, TLS and other Guacamole options.\n\nProxmox remains responsible for container identity, networking and firewall policy.\n\nPrivacy: this installer does not send telemetry or diagnostics." 29 78 || exit_script
 }
 
 select_project_install_mode() {
@@ -146,6 +146,85 @@ select_project_install_mode() {
   2) mode="advanced" ;;
   *) exit_script ;;
   esac
+}
+
+prepare_latest_debian_template() {
+  # The retained framework normally prefers a cached template and can skip its
+  # catalog refresh when one is already present. For this project, make Debian
+  # 13 AMD64 freshness deterministic while leaving ARM64 handling unchanged.
+  command -v pveversion >/dev/null 2>&1 || return 0
+  [[ "$(dpkg --print-architecture 2>/dev/null || true)" == "amd64" ]] || return 0
+  [[ "${var_os:-debian}" == "debian" && "${var_version:-13}" == "13" ]] || return 0
+
+  local storage="${TEMPLATE_STORAGE:-${var_template_storage:-}}"
+  local available existing existing_name newest_name
+
+  if [[ -z "$storage" ]]; then
+    msg_error "No Proxmox template storage was selected before Debian template preparation"
+    exit 226
+  fi
+
+  msg_info "Refreshing the official Proxmox appliance catalog"
+  if ! pveam update >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+    msg_error "Failed to refresh the official Proxmox appliance catalog"
+    exit 226
+  fi
+  msg_ok "Official Proxmox appliance catalog refreshed"
+
+  available=$(pveam available --section system 2>/dev/null \
+    | awk '$2 ~ /^debian-13-standard_.*_amd64\.tar\.zst$/ {print $2}' \
+    | sort -V | tail -n1)
+  if [[ -z "$available" ]]; then
+    msg_error "No Debian 13 AMD64 standard template is available from the Proxmox appliance catalog"
+    exit 226
+  fi
+
+  existing=$(pveam list "$storage" 2>/dev/null \
+    | awk '$1 ~ /debian-13-standard_.*_amd64\.tar\.zst$/ {print $1}' \
+    | sed 's|.*/||' | sort -V | tail -n1)
+  existing_name="${existing##*/}"
+
+  if [[ -z "$existing_name" ]]; then
+    msg_info "No cached Debian 13 template found on ${storage}; downloading ${available}"
+    if ! pveam download "$storage" "$available" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+      msg_error "Failed to download Debian template ${available} to ${storage}"
+      exit 226
+    fi
+  elif [[ "$existing_name" == "$available" ]]; then
+    msg_ok "Current Debian template is already cached: ${available}"
+  else
+    newest_name=$(printf '%s\n%s\n' "$existing_name" "$available" | sort -V | tail -n1)
+    if [[ "$newest_name" == "$existing_name" ]]; then
+      msg_warn "Cached Debian template ${existing_name} is newer than catalog ${available}; keeping cached template"
+    else
+      msg_info "Newer Debian 13 template available (${existing_name} -> ${available}); downloading ${available}"
+      if ! pveam download "$storage" "$available" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+        msg_error "Failed to download Debian template ${available} to ${storage}"
+        exit 226
+      fi
+    fi
+  fi
+
+  if [[ "$newest_name" != "$existing_name" || -z "$existing_name" ]]; then
+    if ! pveam list "$storage" 2>/dev/null \
+      | awk -v wanted="vztmpl/${available}" '
+          length($1) >= length(wanted) && substr($1, length($1) - length(wanted) + 1) == wanted {found=1}
+          END {exit !found}
+        '; then
+      msg_error "Debian template ${available} is not available on ${storage} after download"
+      exit 226
+    fi
+  fi
+
+  TEMPLATE_STORAGE="$storage"
+  var_template_storage="$storage"
+  export TEMPLATE_STORAGE var_template_storage
+
+  if [[ -n "$existing_name" && "$newest_name" == "$existing_name" && "$existing_name" != "$available" ]]; then
+    msg_ok "Debian template ready: ${existing_name}"
+  else
+    msg_ok "Debian template ready: ${available}"
+  fi
 }
 
 function update_script() {
@@ -356,6 +435,7 @@ _FRAMEWORK_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/Prox
 
 select_project_install_mode "${1:-}"
 start
+prepare_latest_debian_template
 configure_default_identity
 configure_default_network
 configure_project_tags
