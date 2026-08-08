@@ -39,6 +39,8 @@ The existing external Proxmox helper framework is retained only for its establis
 
 The installer does not offer a telemetry/diagnostics preference, does not report installation progress or results to the external framework service, and does not require its diagnostics DNS endpoint. User-facing installer dialogs use ImmacularIT/Itiligent project identity instead of unrelated framework branding.
 
+The normal interactive launcher begins with a project-owned Welcome screen followed by only two installation choices: **Default Install** and **Advanced Install**. Generic helper-framework **User Defaults** and **Settings** entries are intentionally not shown in the normal project UI. Their underlying compatibility functions are left intact rather than deleted, reducing the risk of changing the established container builder.
+
 Inside the completed container, the login profile does not display external-framework promotional attribution and `/usr/bin/update` points back to this ImmacularIT repository.
 
 ## Validation status
@@ -58,6 +60,8 @@ Default Install was tested successfully with:
 
 An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
 
+Those runtime results predate the telemetry/privacy and Welcome-screen cleanup on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`.
+
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
 For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
@@ -70,7 +74,12 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-**Default Install** keeps the normal resource defaults and adds compact choices for:
+For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, and telemetry-free policy. The next screen contains only:
+
+- **Default Install** — recommended guided setup using the standard 1 CPU, 2048 MiB RAM, 8 GB disk, Debian 13, unprivileged profile;
+- **Advanced Install** — the full advanced Proxmox container configuration path.
+
+**Default Install** then adds compact choices for:
 
 - suggested or custom container ID;
 - suggested or custom container hostname;
