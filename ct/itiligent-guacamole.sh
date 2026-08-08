@@ -134,16 +134,16 @@ select_project_install_mode() {
 
   choice=$(whiptail \
     --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
-    --title "INSTALLATION MODE" \
-    --ok-button "Select" --cancel-button "Exit" \
-    --menu "\nChoose how you want to configure the Proxmox container:" 17 76 2 \
-    "1" "Default Install - recommended guided setup with standard resources" \
-    "2" "Advanced Install - full Proxmox container configuration" \
-    3>&1 1>&2 2>&3) || exit_script
+    --title "INSTALL OPTIONS" \
+    --ok-button "Select" --cancel-button "Exit Script" \
+    --menu "\nChoose an option:" 14 62 2 \
+    "Default Install" "" \
+    "Advanced Install" "" \
+    --default-item "Default Install" 3>&1 1>&2 2>&3) || exit_script
 
   case "$choice" in
-  1) mode="default" ;;
-  2) mode="advanced" ;;
+  "Default Install") mode="default" ;;
+  "Advanced Install") mode="advanced" ;;
   *) exit_script ;;
   esac
 }
