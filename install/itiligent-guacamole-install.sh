@@ -13,6 +13,12 @@ export LC_ALL=C.UTF-8
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 
+# The retained helper library can re-import host/default locale state while it
+# initializes. Reassert the neutral install locale immediately afterward so all
+# project-side package operations run with deterministic UTF-8 settings.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 # The outer container builder supplies its helper library through
 # FUNCTIONS_FILE_PATH. Keep those proven runtime helpers, but make this project
 # permanently telemetry-free regardless of any host-side saved preference.
@@ -122,6 +128,13 @@ if [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]]; then
 fi
 catch_errors
 setting_up_container
+
+# setting_up_container and related helper code are external compatibility
+# functions. Reassert once more at the handoff boundary before project package
+# operations and the adapted Itiligent suite begin.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 project_network_check
 project_update_os
 
@@ -153,6 +166,16 @@ import sys
 path = Path(sys.argv[1])
 commit = sys.argv[2]
 s = path.read_text()
+
+# Make the neutral UTF-8 installation locale explicit inside the adapted parent
+# script too. This protects child execution even if the surrounding launcher or
+# retained helper framework changes its environment handling later.
+if 'export LC_ALL=C.UTF-8' not in s:
+    s = s.replace(
+        '#!/bin/bash\n',
+        '#!/bin/bash\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\n',
+        1,
+    )
 
 # Root execution is the normal Proxmox LXC installation model for this project.
 s = re.sub(
@@ -212,8 +235,12 @@ s = s.replace('${SUDO_USER}', 'root').replace('$SUDO_USER', 'root')
 
 # Patch downloaded child scripts before any child is executed.
 patch_block = r'''
-# Proxmox adaptation: patch child scripts for root-run LXC execution.
+# Proxmox adaptation: patch child scripts for root-run LXC execution and force
+# a known-good UTF-8 locale inside each child, independent of inherited host
+# locale variables or future helper-framework environment changes.
 for child_script in "$DOWNLOAD_DIR"/*.sh; do
+    grep -Fqx 'export LANG=C.UTF-8' "$child_script" || sed -i '2i export LANG=C.UTF-8' "$child_script"
+    grep -Fqx 'export LC_ALL=C.UTF-8' "$child_script" || sed -i '3i export LC_ALL=C.UTF-8' "$child_script"
     sed -i -E \
       -e 's/(^|[[:space:]])sudo[[:space:]]+-E[[:space:]]+/\1/g' \
       -e 's/(^|[[:space:]])sudo[[:space:]]+/\1/g' \
@@ -258,16 +285,17 @@ msg_ok "Adapted Itiligent installer for Proxmox LXC"
 
 # Do not wrap the interactive upstream menu in msg_info. Its spinner redraws
 # the same terminal line and hides interactive prompts, so keep the installer
-# attached directly to the active terminal instead.
+# attached directly to the active terminal instead. Set the locale explicitly
+# on this execution boundary as an additional guard against inherited host state.
 echo
 echo -e "${INFO}${YW}Starting interactive Itiligent Guacamole configuration.${CL}"
 echo -e "${INFO}${YW}Answer each prompt below; password input will not be echoed.${CL}"
 echo
 cd /root
 if [[ -r /dev/tty ]]; then
-  bash "$SETUP_SCRIPT" </dev/tty
+  env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT" </dev/tty
 else
-  bash "$SETUP_SCRIPT"
+  env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT"
 fi
 msg_ok "Itiligent Guacamole setup completed"
 
