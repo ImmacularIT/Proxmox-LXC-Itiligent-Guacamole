@@ -104,3 +104,5 @@ jobs:
           PY
       - name: Validate telemetry-free installer invariants
         run: python3 tests/validate_privacy_invariants.py
+      - name: Validate Debian template freshness invariants
+        run: python3 tests/validate_template_refresh.py
