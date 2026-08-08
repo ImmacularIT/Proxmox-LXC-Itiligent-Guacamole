@@ -81,15 +81,26 @@ assert 'Edit Default.vars' not in project_menu
 assert 'Edit App.vars' not in project_menu
 
 # Fresh Debian containers can inherit host regional LC_* values before those
-# locales exist in the guest. Match the NPM adaptation by forcing Debian's
-# always-available neutral UTF-8 locale for the installation process, and do so
-# before the helper library or any child installation scripts are executed.
-assert 'export LANG=C.UTF-8' in installer
-assert 'export LC_ALL=C.UTF-8' in installer
+# locales exist in the guest. The neutral locale must be asserted before and
+# after the helper library, explicitly embedded into the adapted Itiligent
+# parent and downloaded child scripts, and set on the final execution boundary.
 helper_source = 'source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"'
+assert installer.count('export LANG=C.UTF-8') >= 4
+assert installer.count('export LC_ALL=C.UTF-8') >= 4
 assert helper_source in installer
-assert installer.index('export LANG=C.UTF-8') < installer.index(helper_source)
-assert installer.index('export LC_ALL=C.UTF-8') < installer.index(helper_source)
+first_lang = installer.index('export LANG=C.UTF-8')
+first_lc = installer.index('export LC_ALL=C.UTF-8')
+helper_pos = installer.index(helper_source)
+assert first_lang < helper_pos
+assert first_lc < helper_pos
+post_helper = installer[helper_pos + len(helper_source):]
+assert 'export LANG=C.UTF-8' in post_helper
+assert 'export LC_ALL=C.UTF-8' in post_helper
+assert "'#!/bin/bash\\nexport LANG=C.UTF-8\\nexport LC_ALL=C.UTF-8\\n'" in installer
+assert "sed -i '2i export LANG=C.UTF-8' \"$child_script\"" in installer
+assert "sed -i '3i export LC_ALL=C.UTF-8' \"$child_script\"" in installer
+assert 'env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT" </dev/tty' in installer
+assert 'env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT"' in installer
 
 # Container-side DNS checks must be limited to the actual GitHub hosts needed by
 # this project, and the generated update helper must return to this repository.
@@ -105,4 +116,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer, project entry UI, Default storage, and neutral locale invariants validated.")
+print("Telemetry-free installer, project entry UI, Default storage, and hardened neutral locale invariants validated.")
