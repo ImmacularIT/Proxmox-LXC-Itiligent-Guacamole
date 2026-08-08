@@ -48,6 +48,29 @@ jobs:
           install_script = Path("install") / f'{metadata["slug"]}-install.sh'
           assert install_script.is_file(), f"Missing installer: {install_script}"
           PY
+      - name: Validate repository rename references
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          repo_name = "Proxmox-LXC-Itiligent-Guacamole"
+          repo_url = f"https://github.com/ImmacularIT/{repo_name}"
+          raw_base = f"https://raw.githubusercontent.com/ImmacularIT/{repo_name}"
+
+          launcher = Path("ct/itiligent-guacamole.sh").read_text()
+          readme = Path("README.md").read_text()
+          branding = Path("docs/PROXMOX-BRANDING.md").read_text()
+          handoff = Path("docs/PROJECT-HANDOFF.md").read_text()
+          metadata = json.loads(Path("json/itiligent-guacamole.json").read_text())
+
+          assert f'PROJECT_REPO="{repo_name}"' in launcher
+          assert raw_base in readme
+          assert repo_url in branding
+          assert raw_base in handoff
+          assert metadata["documentation"] == repo_url
+          assert metadata["repository_url"] == repo_url
+          PY
       - name: Validate Proxmox branding assets and launcher hooks
         run: |
           python3 - <<'PY'
