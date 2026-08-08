@@ -43,6 +43,8 @@ The normal interactive launcher begins with a project-owned Welcome screen follo
 
 Inside the completed container, the login profile does not display external-framework promotional attribution and `/usr/bin/update` points back to this ImmacularIT repository.
 
+During installation, the container-side process uses Debian's built-in neutral `C.UTF-8` locale so Proxmox host `LC_*` values that are not generated in a fresh guest do not produce Perl/locale warnings. This process-local setting does not replace the container's regional locale or timezone configuration.
+
 ## Debian template freshness
 
 For Debian 13 AMD64 installations, the launcher refreshes the official Proxmox appliance catalog after the normal installation mode and storage selection has completed and before the LXC is created. The selected Proxmox template storage is preserved; only the image freshness behavior is tightened.
@@ -73,7 +75,7 @@ Default Install was tested successfully with:
 
 An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
 
-Those runtime results predate the telemetry/privacy cleanup, Welcome-screen simplification, and deterministic Debian-template freshness behavior on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`; the Default Install should also confirm the refreshed-template path.
+Those runtime results predate the telemetry/privacy cleanup, Welcome-screen simplification, deterministic Debian-template freshness behavior, restored explicit Default root-storage chooser, and neutral installation-locale guard on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`; the Default Install should also confirm the refreshed-template path and absence of inherited-locale warnings.
 
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
