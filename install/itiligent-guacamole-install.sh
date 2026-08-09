@@ -3,11 +3,29 @@
 # License: MIT
 # Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer.
 
+# Capture the UTF-8 locale names inherited from the Proxmox host before
+# neutralizing the installer environment. The retained helper framework and
+# Itiligent child scripts can later re-expose these category values, so ensure
+# the corresponding locales actually exist in the Debian guest as well.
+declare -a PROJECT_INHERITED_UTF8_LOCALES=()
+project_capture_locale() {
+  local candidate="${1:-}" existing
+  [[ "$candidate" =~ ^[A-Za-z]{2,3}_[A-Za-z]{2}\.UTF-8$ ]] || return 0
+  for existing in "${PROJECT_INHERITED_UTF8_LOCALES[@]}"; do
+    [[ "$existing" == "$candidate" ]] && return 0
+  done
+  PROJECT_INHERITED_UTF8_LOCALES+=("$candidate")
+}
+for locale_var in LANG LC_CTYPE LC_NUMERIC LC_COLLATE LC_TIME LC_MESSAGES LC_MONETARY LC_ADDRESS LC_IDENTIFICATION LC_MEASUREMENT LC_PAPER LC_TELEPHONE LC_NAME; do
+  project_capture_locale "${!locale_var:-}"
+done
+# The external builder commonly configures en_US.UTF-8 as the guest default,
+# so always generate it even when the host only exposes regional LC_* values.
+project_capture_locale "en_US.UTF-8"
+
 # Debian's C.UTF-8 locale is always available in the minimal container. Use it
-# only for this installation process so inherited Proxmox host LC_* values (for
-# example sv_SE.UTF-8 before that locale exists in the guest) cannot trigger
-# noisy Perl/locale warnings. This does not change the container's configured
-# regional locale or timezone.
+# for the installation process itself so package/bootstrap commands are safe
+# before the captured regional locales have been generated.
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
@@ -121,6 +139,25 @@ EOF_PROXY
   msg_ok "Updated Container OS"
 }
 
+project_prepare_guest_locales() {
+  local locale_name escaped
+
+  msg_info "Preparing guest locales"
+  $STD env DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 apt-get install -y locales
+
+  for locale_name in "${PROJECT_INHERITED_UTF8_LOCALES[@]}"; do
+    escaped="${locale_name//./\\.}"
+    if grep -Eq "^#[[:space:]]*${escaped}[[:space:]]+UTF-8([[:space:]]|$)" /etc/locale.gen; then
+      sed -i -E "s|^#[[:space:]]*(${escaped}[[:space:]]+UTF-8)([[:space:]]*)$|\1\2|" /etc/locale.gen
+    elif ! grep -Eq "^[[:space:]]*${escaped}[[:space:]]+UTF-8([[:space:]]|$)" /etc/locale.gen; then
+      printf '%s UTF-8\n' "$locale_name" >>/etc/locale.gen
+    fi
+  done
+
+  LANG=C.UTF-8 LC_ALL=C.UTF-8 locale-gen >/dev/null
+  msg_ok "Prepared guest locales: ${PROJECT_INHERITED_UTF8_LOCALES[*]}"
+}
+
 color
 verb_ip6
 if [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]]; then
@@ -137,6 +174,7 @@ export LC_ALL=C.UTF-8
 
 project_network_check
 project_update_os
+project_prepare_guest_locales
 
 readonly UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"
 readonly UPSTREAM_BASE="https://raw.githubusercontent.com/itiligent/Easy-Guacamole-Installer/${UPSTREAM_COMMIT}"
