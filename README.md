@@ -33,6 +33,25 @@ Use **Advanced Install** for the full advanced Proxmox configuration wizard prov
 
 After the existing Proxmox template storage has been resolved, the launcher refreshes the appliance catalog and ensures the newest Debian 13 AMD64 standard image is available on that storage before container creation. The container setup is then followed by the original interactive Itiligent configuration menus.
 
+## Access
+
+Native Guacamole access remains available at:
+
+```text
+http://CONTAINER-IP:8080/guacamole
+```
+
+The initial upstream credentials are:
+
+```text
+Username: guacadmin
+Password: guacadmin
+```
+
+Change the password immediately after the first login. Nginx and TLS choices may provide a different preferred frontend URL while native port 8080 remains the fallback.
+
+After replacing an older Guacamole installation at the same URL, use a hard refresh or clear site data if the browser displays stale interface elements.
+
 ## Scope
 
 This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Proxmox helper-framework container installation:
@@ -155,25 +174,6 @@ install/itiligent-guacamole-install.sh
 Testing against the current PVE Scripts Management/ProxmoxVE-Local flow showed that custom repository entries are not synchronized into the active PocketBase-backed Available Scripts catalogue. Adding this repository therefore does **not currently make Itiligent Guacamole appear in search**, even though the metadata and paths are valid.
 
 Use the direct installation command above. Retest custom-repository support only after a newer PVE Scripts Management release documents and implements end-to-end repository synchronization, catalogue merging, and custom script downloads.
-
-## Access
-
-Native Guacamole access remains available at:
-
-```text
-http://CONTAINER-IP:8080/guacamole
-```
-
-The initial upstream credentials are:
-
-```text
-Username: guacadmin
-Password: guacadmin
-```
-
-Change the password immediately after the first login. Nginx and TLS choices may provide a different preferred frontend URL while native port 8080 remains the fallback.
-
-After replacing an older Guacamole installation at the same URL, use a hard refresh or clear site data if the browser displays stale interface elements.
 
 ## Suggested functional checks
 
