@@ -4,6 +4,35 @@ A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://
 
 <a href="https://www.buymeacoffee.com/eli66" target="_blank"><img src="http://public.jc21.com/github/by-me-a-coffee.png" alt="Buy Me A Coffee" style="height: 51px !important;width: 217px !important;" ></a>
 
+## Direct installation
+
+Run this command as `root` in the Proxmox host shell:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
+```
+
+For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, automatic Debian 13 AMD64 template freshness, and telemetry-free policy. The next screen contains only:
+
+- **Default Install** — recommended guided setup using the standard 1 CPU, 2048 MiB RAM, 8 GB disk, Debian 13, unprivileged profile;
+- **Advanced Install** — the full advanced Proxmox container configuration path.
+
+**Default Install** then adds compact choices for:
+
+- suggested or custom container ID;
+- suggested or custom container hostname;
+- Proxmox storage;
+- Proxmox bridge;
+- DHCP or static IPv4;
+- IPv4 gateway when static addressing is selected;
+- optional VLAN tag.
+
+Pressing Enter in the container ID and hostname fields accepts the suggested values.
+
+Use **Advanced Install** for the full advanced Proxmox configuration wizard provided by the retained helper framework, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
+
+After the existing Proxmox template storage has been resolved, the launcher refreshes the appliance catalog and ensures the newest Debian 13 AMD64 standard image is available on that storage before container creation. The container setup is then followed by the original interactive Itiligent configuration menus.
+
 ## Scope
 
 This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Proxmox helper-framework container installation:
@@ -80,35 +109,6 @@ Those runtime results predate the telemetry/privacy cleanup, Welcome-screen simp
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
 For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
-
-## Direct installation
-
-Run this command as `root` in the Proxmox host shell:
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
-```
-
-For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, automatic Debian 13 AMD64 template freshness, and telemetry-free policy. The next screen contains only:
-
-- **Default Install** — recommended guided setup using the standard 1 CPU, 2048 MiB RAM, 8 GB disk, Debian 13, unprivileged profile;
-- **Advanced Install** — the full advanced Proxmox container configuration path.
-
-**Default Install** then adds compact choices for:
-
-- suggested or custom container ID;
-- suggested or custom container hostname;
-- Proxmox storage;
-- Proxmox bridge;
-- DHCP or static IPv4;
-- IPv4 gateway when static addressing is selected;
-- optional VLAN tag.
-
-Pressing Enter in the container ID and hostname fields accepts the suggested values.
-
-Use **Advanced Install** for the full advanced Proxmox configuration wizard provided by the retained helper framework, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
-
-After the existing Proxmox template storage has been resolved, the launcher refreshes the appliance catalog and ensures the newest Debian 13 AMD64 standard image is available on that storage before container creation. The container setup is then followed by the original interactive Itiligent configuration menus.
 
 ## Proxmox container information panel
 
