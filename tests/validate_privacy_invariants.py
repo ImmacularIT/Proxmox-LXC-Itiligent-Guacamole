@@ -36,6 +36,13 @@ assert 'configure_default_container_storage' in launcher
 assert 'configure_default_network' in launcher
 assert 'set_project_description' in launcher
 
+# Development testing must be able to select a matching repository ref for the
+# container-side installer. Production intentionally defaults to main, while
+# tests of a development launcher must pass ITILIGENT_REPO_REF explicitly so
+# host and guest code come from the same branch.
+assert 'PROJECT_REF="${ITILIGENT_REPO_REF:-main}"' in launcher
+assert '_PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"' in launcher
+
 # The normal interactive entry path is project-owned. The Welcome screen carries
 # the explanatory information; the following chooser intentionally mirrors the
 # compact NPM layout with only the two mode names visible.
@@ -136,4 +143,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer, clean project entry UI, Default storage, and generated guest locale invariants validated.")
+print("Telemetry-free installer, ref-consistent testing, clean project entry UI, Default storage, and generated guest locale invariants validated.")
