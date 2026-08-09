@@ -87,10 +87,16 @@ assert 'Edit Default.vars' not in project_menu
 assert 'Edit App.vars' not in project_menu
 
 # Fresh Debian containers can inherit host regional LC_* values before those
-# locales exist in the guest. The neutral locale must be asserted before and
-# after the helper library, explicitly embedded into the adapted Itiligent
-# parent and downloaded child scripts, and set on the final execution boundary.
+# locales exist in the guest. Keep the neutral locale guards, but also capture
+# the inherited UTF-8 locale names and generate them inside the guest. This
+# fixes the underlying condition even if a downstream process later clears
+# LC_ALL and exposes the individual regional LC_* variables again.
 helper_source = 'source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"'
+assert 'PROJECT_INHERITED_UTF8_LOCALES=()' in installer
+assert 'project_capture_locale() {' in installer
+assert 'project_capture_locale "${!locale_var:-}"' in installer
+assert 'project_capture_locale "en_US.UTF-8"' in installer
+assert installer.index('PROJECT_INHERITED_UTF8_LOCALES=()') < installer.index('export LANG=C.UTF-8')
 assert installer.count('export LANG=C.UTF-8') >= 4
 assert installer.count('export LC_ALL=C.UTF-8') >= 4
 assert helper_source in installer
@@ -102,6 +108,14 @@ assert first_lc < helper_pos
 post_helper = installer[helper_pos + len(helper_source):]
 assert 'export LANG=C.UTF-8' in post_helper
 assert 'export LC_ALL=C.UTF-8' in post_helper
+assert 'project_prepare_guest_locales() {' in installer
+locale_fn = installer.split('project_prepare_guest_locales() {', 1)[1].split('\n}\n\ncolor', 1)[0]
+assert 'apt-get install -y locales' in locale_fn
+assert 'for locale_name in "${PROJECT_INHERITED_UTF8_LOCALES[@]}"' in locale_fn
+assert '/etc/locale.gen' in locale_fn
+assert 'locale-gen >/dev/null' in locale_fn
+assert 'project_update_os\nproject_prepare_guest_locales\n' in installer
+assert installer.index('project_prepare_guest_locales\n') < installer.index('readonly UPSTREAM_COMMIT=')
 assert "'#!/bin/bash\\nexport LANG=C.UTF-8\\nexport LC_ALL=C.UTF-8\\n'" in installer
 assert "sed -i '2i export LANG=C.UTF-8' \"$child_script\"" in installer
 assert "sed -i '3i export LC_ALL=C.UTF-8' \"$child_script\"" in installer
@@ -122,4 +136,4 @@ assert 'UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"' in installer
 assert 'bash "$SETUP_SCRIPT" </dev/tty' in installer
 assert 'cleanup_lxc' in installer
 
-print("Telemetry-free installer, clean project entry UI, Default storage, and hardened neutral locale invariants validated.")
+print("Telemetry-free installer, clean project entry UI, Default storage, and generated guest locale invariants validated.")
