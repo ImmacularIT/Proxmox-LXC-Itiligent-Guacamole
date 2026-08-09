@@ -3,18 +3,184 @@
 # License: MIT
 # Proxmox LXC adaptation of the Itiligent Easy Guacamole Installer.
 
+# Capture the UTF-8 locale names inherited from the Proxmox host before
+# neutralizing the installer environment. The retained helper framework and
+# Itiligent child scripts can later re-expose these category values, so ensure
+# the corresponding locales actually exist in the Debian guest as well.
+declare -a PROJECT_INHERITED_UTF8_LOCALES=()
+project_capture_locale() {
+  local candidate="${1:-}" existing
+  [[ "$candidate" =~ ^[A-Za-z]{2,3}_[A-Za-z]{2}\.UTF-8$ ]] || return 0
+  for existing in "${PROJECT_INHERITED_UTF8_LOCALES[@]}"; do
+    [[ "$existing" == "$candidate" ]] && return 0
+  done
+  PROJECT_INHERITED_UTF8_LOCALES+=("$candidate")
+}
+for locale_var in LANG LC_CTYPE LC_NUMERIC LC_COLLATE LC_TIME LC_MESSAGES LC_MONETARY LC_ADDRESS LC_IDENTIFICATION LC_MEASUREMENT LC_PAPER LC_TELEPHONE LC_NAME; do
+  project_capture_locale "${!locale_var:-}"
+done
+# The external builder commonly configures en_US.UTF-8 as the guest default,
+# so always generate it even when the host only exposes regional LC_* values.
+project_capture_locale "en_US.UTF-8"
+
+# Debian's C.UTF-8 locale is always available in the minimal container. Use it
+# for the installation process itself so package/bootstrap commands are safe
+# before the captured regional locales have been generated.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
+
+# The retained helper library can re-import host/default locale state while it
+# initializes. Reassert the neutral install locale immediately afterward so all
+# project-side package operations run with deterministic UTF-8 settings.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
+# The outer container builder supplies its helper library through
+# FUNCTIONS_FILE_PATH. Keep those proven runtime helpers, but make this project
+# permanently telemetry-free regardless of any host-side saved preference.
+DIAGNOSTICS="no"
+export DIAGNOSTICS
+post_to_api() { return 0; }
+post_progress_to_api() { return 0; }
+post_update_to_api() { return 0; }
+telemetry_new_attempt() { return 0; }
+
+# Preserve the helper library's network checks while removing the unrelated
+# external-framework DNS dependency from this project's installation path.
+project_network_check() {
+  set +e
+  trap - ERR
+  ipv4_connected=false
+  ipv6_connected=false
+  sleep 1
+
+  if ping -c 1 -W 1 1.1.1.1 &>/dev/null || ping -c 1 -W 1 8.8.8.8 &>/dev/null || ping -c 1 -W 1 9.9.9.9 &>/dev/null; then
+    msg_ok "IPv4 Internet Connected"
+    ipv4_connected=true
+  else
+    msg_error "IPv4 Internet Not Connected"
+  fi
+
+  if ping6 -c 1 -W 1 2606:4700:4700::1111 &>/dev/null || ping6 -c 1 -W 1 2001:4860:4860::8888 &>/dev/null || ping6 -c 1 -W 1 2620:fe::fe &>/dev/null; then
+    msg_ok "IPv6 Internet Connected"
+    ipv6_connected=true
+  else
+    msg_error "IPv6 Internet Not Connected"
+  fi
+
+  if [[ $ipv4_connected == false && $ipv6_connected == false ]]; then
+    read -r -p "No Internet detected, would you like to continue anyway? <y/N> " prompt </dev/tty
+    if [[ "${prompt,,}" =~ ^(y|yes)$ ]]; then
+      echo -e "${INFO}${RD}Expect Issues Without Internet${CL}"
+    else
+      echo -e "${NETWORK}Check Network Settings"
+      exit 122
+    fi
+  fi
+
+  GIT_HOSTS=("github.com" "raw.githubusercontent.com" "api.github.com")
+  GIT_STATUS="Git DNS:"
+  DNS_FAILED=false
+
+  for HOST in "${GIT_HOSTS[@]}"; do
+    RESOLVEDIP=$(getent hosts "$HOST" | awk '{ print $1 }' | grep -E '(^([0-9]{1,3}\.){3}[0-9]{1,3}$)|(^[a-fA-F0-9:]+$)' | head -n1)
+    if [[ -z "$RESOLVEDIP" ]]; then
+      GIT_STATUS+="$HOST:($DNSFAIL)"
+      DNS_FAILED=true
+    else
+      GIT_STATUS+=" $HOST:($DNSOK)"
+    fi
+  done
+
+  if [[ "$DNS_FAILED" == true ]]; then
+    fatal "$GIT_STATUS"
+  else
+    msg_ok "$GIT_STATUS"
+  fi
+
+  set -e
+  trap 'error_handler' ERR
+}
+
+# Keep the established OS-update, proxy, APT cacher, and mirror fallback
+# behavior. The generic tools library downloaded afterward is not required by
+# this installer, so omit that unrelated framework download.
+project_update_os() {
+  msg_info "Updating Container OS"
+  configure_http_proxy
+  if [[ "$CACHER" == "yes" && -z "${HTTP_PROXY:-${http_proxy:-}}" ]]; then
+    echo 'Acquire::http::Proxy-Auto-Detect "/usr/local/bin/apt-proxy-detect.sh";' >/etc/apt/apt.conf.d/00aptproxy
+    local _proxy_raw="${CACHER_IP}"
+    local _proxy_host _proxy_port _proxy_url
+    _proxy_host=$(echo "$_proxy_raw" | sed -e 's|https\?://||' -e 's|/.*||' | cut -d: -f1)
+    _proxy_port=$(echo "$_proxy_raw" | sed -e 's|https\?://||' -e 's|/.*||' | cut -s -d: -f2)
+    if [[ "$_proxy_raw" =~ ^https?:// ]]; then
+      _proxy_url="$_proxy_raw"
+      _proxy_port="${_proxy_port:-80}"
+    else
+      _proxy_port="${_proxy_port:-3142}"
+      _proxy_url="http://${_proxy_raw}:${_proxy_port}"
+    fi
+    cat <<EOF_PROXY >/usr/local/bin/apt-proxy-detect.sh
+#!/bin/bash
+if nc -w1 -z "${_proxy_host}" ${_proxy_port}; then
+  echo -n "${_proxy_url}"
+else
+  echo -n "DIRECT"
+fi
+EOF_PROXY
+    chmod +x /usr/local/bin/apt-proxy-detect.sh
+  fi
+  apt_update_safe
+  $STD apt-get -o Dpkg::Options::="--force-confold" -y dist-upgrade
+  rm -rf /usr/lib/python3.*/EXTERNALLY-MANAGED
+  msg_ok "Updated Container OS"
+}
+
+project_prepare_guest_locales() {
+  local locale_name escaped
+
+  msg_info "Preparing guest locales"
+  $STD env DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 apt-get install -y locales
+
+  for locale_name in "${PROJECT_INHERITED_UTF8_LOCALES[@]}"; do
+    escaped="${locale_name//./\\.}"
+    if grep -Eq "^#[[:space:]]*${escaped}[[:space:]]+UTF-8([[:space:]]|$)" /etc/locale.gen; then
+      sed -i -E "s|^#[[:space:]]*(${escaped}[[:space:]]+UTF-8)([[:space:]]*)$|\1\2|" /etc/locale.gen
+    elif ! grep -Eq "^[[:space:]]*${escaped}[[:space:]]+UTF-8([[:space:]]|$)" /etc/locale.gen; then
+      printf '%s UTF-8\n' "$locale_name" >>/etc/locale.gen
+    fi
+  done
+
+  LANG=C.UTF-8 LC_ALL=C.UTF-8 locale-gen >/dev/null
+  msg_ok "Prepared guest locales: ${PROJECT_INHERITED_UTF8_LOCALES[*]}"
+}
+
 color
 verb_ip6
+if [[ -f /etc/sysctl.d/99-disable-ipv6.conf ]]; then
+  sed -i 's/set by community-scripts/set by ImmacularIT/' /etc/sysctl.d/99-disable-ipv6.conf
+fi
 catch_errors
 setting_up_container
-network_check
-update_os
+
+# setting_up_container and related helper code are external compatibility
+# functions. Reassert once more at the handoff boundary before project package
+# operations and the adapted Itiligent suite begin.
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+
+project_network_check
+project_update_os
+project_prepare_guest_locales
 
 readonly UPSTREAM_COMMIT="676eb7e2711dabdf7f33fa7fe91eafc3dbdb7fce"
 readonly UPSTREAM_BASE="https://raw.githubusercontent.com/itiligent/Easy-Guacamole-Installer/${UPSTREAM_COMMIT}"
 readonly SETUP_SCRIPT="/root/1-setup.sh"
 readonly INSTALL_DIR="/opt/itiligent-guacamole"
+readonly PROJECT_UPDATE_URL="https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh"
 
 msg_info "Installing adaptation dependencies"
 $STD apt-get install -y ca-certificates curl wget python3 iproute2 cron procps
@@ -24,7 +190,8 @@ mkdir -p "$INSTALL_DIR" /var/backups/guacamole
 chmod 700 "$INSTALL_DIR" /var/backups/guacamole
 
 msg_info "Downloading pinned Itiligent installer"
-curl_download "$SETUP_SCRIPT" "${UPSTREAM_BASE}/1-setup.sh"
+curl -fsSL --retry 3 --retry-delay 2 "${UPSTREAM_BASE}/1-setup.sh" -o "$SETUP_SCRIPT"
+[[ -s "$SETUP_SCRIPT" ]] || fatal "Downloaded an empty Itiligent setup script"
 chmod 700 "$SETUP_SCRIPT"
 msg_ok "Downloaded pinned Itiligent installer"
 
@@ -38,7 +205,17 @@ path = Path(sys.argv[1])
 commit = sys.argv[2]
 s = path.read_text()
 
-# Root execution is the normal Community Scripts install model.
+# Make the neutral UTF-8 installation locale explicit inside the adapted parent
+# script too. This protects child execution even if the surrounding launcher or
+# retained helper framework changes its environment handling later.
+if 'export LC_ALL=C.UTF-8' not in s:
+    s = s.replace(
+        '#!/bin/bash\n',
+        '#!/bin/bash\nexport LANG=C.UTF-8\nexport LC_ALL=C.UTF-8\n',
+        1,
+    )
+
+# Root execution is the normal Proxmox LXC installation model for this project.
 s = re.sub(
     r'# Make sure the user is NOT running this script as root.*?'
     r'# Check to see if any previous version of build files exist',
@@ -96,8 +273,12 @@ s = s.replace('${SUDO_USER}', 'root').replace('$SUDO_USER', 'root')
 
 # Patch downloaded child scripts before any child is executed.
 patch_block = r'''
-# Proxmox adaptation: patch child scripts for root-run LXC execution.
+# Proxmox adaptation: patch child scripts for root-run LXC execution and force
+# a known-good UTF-8 locale inside each child, independent of inherited host
+# locale variables or future helper-framework environment changes.
 for child_script in "$DOWNLOAD_DIR"/*.sh; do
+    grep -Fqx 'export LANG=C.UTF-8' "$child_script" || sed -i '2i export LANG=C.UTF-8' "$child_script"
+    grep -Fqx 'export LC_ALL=C.UTF-8' "$child_script" || sed -i '3i export LC_ALL=C.UTF-8' "$child_script"
     sed -i -E \
       -e 's/(^|[[:space:]])sudo[[:space:]]+-E[[:space:]]+/\1/g' \
       -e 's/(^|[[:space:]])sudo[[:space:]]+/\1/g' \
@@ -140,18 +321,19 @@ PY
 chmod 700 "$SETUP_SCRIPT"
 msg_ok "Adapted Itiligent installer for Proxmox LXC"
 
-# Do not wrap the interactive upstream menu in msg_info. msg_info starts the
-# Community Scripts spinner, which redraws the same terminal line and hides the
-# prompts. The installer remains attached to the active terminal instead.
+# Do not wrap the interactive upstream menu in msg_info. Its spinner redraws
+# the same terminal line and hides interactive prompts, so keep the installer
+# attached directly to the active terminal instead. Set the locale explicitly
+# on this execution boundary as an additional guard against inherited host state.
 echo
 echo -e "${INFO}${YW}Starting interactive Itiligent Guacamole configuration.${CL}"
 echo -e "${INFO}${YW}Answer each prompt below; password input will not be echoed.${CL}"
 echo
 cd /root
 if [[ -r /dev/tty ]]; then
-  bash "$SETUP_SCRIPT" </dev/tty
+  env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT" </dev/tty
 else
-  bash "$SETUP_SCRIPT"
+  env LANG=C.UTF-8 LC_ALL=C.UTF-8 bash "$SETUP_SCRIPT"
 fi
 msg_ok "Itiligent Guacamole setup completed"
 
@@ -159,5 +341,23 @@ printf '%s\n' "$UPSTREAM_COMMIT" >/etc/itiligent-guacamole-upstream-commit
 chmod 600 /etc/itiligent-guacamole-upstream-commit
 
 motd_ssh
+if [[ -f /etc/profile.d/00_lxc-details.sh ]]; then
+  sed -i '/community-scripts/d' /etc/profile.d/00_lxc-details.sh
+fi
 customize
+cat >/usr/bin/update <<EOF_UPDATE
+#!/usr/bin/env bash
+set -Eeuo pipefail
+set -a
+[ -f /etc/profile.d/90-http-proxy.sh ] && . /etc/profile.d/90-http-proxy.sh
+set +a
+bash -c "\$(curl -fsSL ${PROJECT_UPDATE_URL})"
+EOF_UPDATE
+chmod 0755 /usr/bin/update
 cleanup_lxc
+
+# install.func creates a diagnostics preference file during bootstrap. This
+# project never uses it; remove the unused artifact after all framework helpers
+# have finished.
+rm -f /usr/local/community-scripts/diagnostics
+rmdir /usr/local/community-scripts 2>/dev/null || true

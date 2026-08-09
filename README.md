@@ -6,7 +6,7 @@ A Proxmox VE LXC adaptation of the [Itiligent Easy Guacamole Installer](https://
 
 ## Scope
 
-This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Community Scripts-style Proxmox container installation:
+This project preserves the existing Itiligent installation choices and optional helper scripts. It changes only the operating assumptions that are incompatible with a Proxmox helper-framework container installation:
 
 - Debian 13 LXC on Proxmox VE 9
 - installation runs as root inside the container
@@ -33,6 +33,31 @@ The upstream Itiligent suite is pinned to commit `676eb7e2711dabdf7f33fa7fe91eaf
 
 No additional Guacamole functions are introduced by this project.
 
+## Installer privacy and project identity
+
+The existing external Proxmox helper framework is retained only for its established container-creation mechanics so Default and Advanced Install behavior does not have to be rewritten. This project hard-disables the framework's diagnostics and telemetry reporting on both the Proxmox host and inside the LXC.
+
+The installer does not offer a telemetry/diagnostics preference, does not report installation progress or results to the external framework service, and does not require its diagnostics DNS endpoint. User-facing installer dialogs use ImmacularIT/Itiligent project identity instead of unrelated framework branding.
+
+The normal interactive launcher begins with a project-owned Welcome screen followed by only two installation choices: **Default Install** and **Advanced Install**. Generic helper-framework **User Defaults** and **Settings** entries are intentionally not shown in the normal project UI. Their underlying compatibility functions are left intact rather than deleted, reducing the risk of changing the established container builder.
+
+Inside the completed container, the login profile does not display external-framework promotional attribution and `/usr/bin/update` points back to this ImmacularIT repository.
+
+During installation, the container-side process uses Debian's built-in neutral `C.UTF-8` locale so Proxmox host `LC_*` values that are not generated in a fresh guest do not produce Perl/locale warnings. This process-local setting does not replace the container's regional locale or timezone configuration.
+
+## Debian template freshness
+
+For Debian 13 AMD64 installations, the launcher refreshes the official Proxmox appliance catalog after the normal installation mode and storage selection has completed and before the LXC is created. The selected Proxmox template storage is preserved; only the image freshness behavior is tightened.
+
+The launcher selects the newest catalog image matching `debian-13-standard_*_amd64.tar.zst` and behaves as follows:
+
+- if no Debian 13 image is cached on the selected template storage, the current catalog image is downloaded automatically;
+- if the cached image is older, the newer catalog image is downloaded automatically and used for the new container;
+- if the current image is already cached, it is reused without another download;
+- if a cached image is somehow newer than the current catalog entry, it is retained rather than downgraded.
+
+Older cached templates are not deleted automatically. ARM64 continues to use the retained helper framework's existing ARM64 template handling and is not changed by this AMD64 freshness pass.
+
 ## Validation status
 
 The core installation path has been successfully tested on Proxmox VE 9.2.6 using an unprivileged Debian 13 LXC with a local database. The Guacamole login and management interface were confirmed working.
@@ -50,6 +75,8 @@ Default Install was tested successfully with:
 
 An RDP connection from Guacamole to a Windows 11 server was created and used successfully after the final Default Install changes.
 
+Those runtime results predate the telemetry/privacy cleanup, Welcome-screen simplification, deterministic Debian-template freshness behavior, restored explicit Default root-storage chooser, and neutral installation-locale guard on the current development branch. A fresh Default Install and Advanced Install smoke test is recommended before merging that cleanup to `main`; the Default Install should also confirm the refreshed-template path and absence of inherited-locale warnings.
+
 The remaining optional Itiligent choices should be tested individually before production use, especially remote database access, Nginx, TLS, external authentication, recordings, SSH/VNC connectivity, backups, and upgrades.
 
 For the complete implementation history, known quirks, test matrix, upstream-update process, and maintenance workflow, see [Project Technical Handoff and Maintenance Workflow](docs/PROJECT-HANDOFF.md).
@@ -62,7 +89,12 @@ Run this command as `root` in the Proxmox host shell:
 bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itiligent-Guacamole/main/ct/itiligent-guacamole.sh)
 ```
 
-**Default Install** keeps the normal resource defaults and adds compact choices for:
+For an interactive installation, the launcher first shows a Welcome screen summarizing the project, default LXC profile, ownership boundaries, post-creation Itiligent configuration, automatic Debian 13 AMD64 template freshness, and telemetry-free policy. The next screen contains only:
+
+- **Default Install** — recommended guided setup using the standard 1 CPU, 2048 MiB RAM, 8 GB disk, Debian 13, unprivileged profile;
+- **Advanced Install** — the full advanced Proxmox container configuration path.
+
+**Default Install** then adds compact choices for:
 
 - suggested or custom container ID;
 - suggested or custom container hostname;
@@ -74,13 +106,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/ImmacularIT/Proxmox-LXC-Itil
 
 Pressing Enter in the container ID and hostname fields accepts the suggested values.
 
-Use **Advanced Install** for the full Community Scripts configuration wizard, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
+Use **Advanced Install** for the full advanced Proxmox configuration wizard provided by the retained helper framework, including CPU, RAM, disk size, IPv6, DNS, MTU, MAC address, SSH, container features, and other advanced properties.
 
-The container setup is followed by the original interactive Itiligent configuration menus.
+After the existing Proxmox template storage has been resolved, the launcher refreshes the appliance catalog and ensures the newest Debian 13 AMD64 standard image is available on that storage before container creation. The container setup is then followed by the original interactive Itiligent configuration menus.
 
 ## Proxmox container information panel
 
-New containers receive a project-specific description in the Proxmox VE Summary panel rather than the standard Community Scripts promotional panel.
+New containers receive a project-specific description in the Proxmox VE Summary panel rather than a generic external-framework promotional panel.
 
 The panel:
 
@@ -88,7 +120,7 @@ The panel:
 - identifies this project as an unofficial Proxmox LXC adaptation;
 - displays the ImmacularIT logo and links to the maintainer profile;
 - links to this adaptation repository and its issue tracker;
-- omits Community Scripts donation, script-page, discussion, and repository links.
+- omits unrelated framework donation, script-page, discussion, and repository links.
 
 The associated Proxmox tags are:
 
@@ -99,7 +131,7 @@ immacularit
 remote-access
 ```
 
-The automatic `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
+The automatic legacy-framework `community-script` marker is removed because this repository is independently maintained. User-defined tags are preserved.
 
 Branding assets used by the panel are stored in:
 
@@ -112,7 +144,7 @@ Implementation and validation details are documented in [Proxmox Container Brand
 
 ## PVE Scripts Management status
 
-This repository includes Community-style metadata and conventional paths:
+This repository includes conventional PVE Scripts Management metadata and paths:
 
 ```text
 json/itiligent-guacamole.json
@@ -155,4 +187,4 @@ After replacing an older Guacamole installation at the same URL, use a hard refr
 
 ## Attribution
 
-The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The LXC launcher uses the Community Scripts Proxmox VE framework for container creation. See the source repositories for their respective licenses and attribution.
+The application installation logic, feature suite, and Itiligent branding originate from Itiligent. The Proxmox LXC adaptation and ImmacularIT branding are maintained in this repository. The launcher retains an external Proxmox VE helper framework for container-creation mechanics only; its diagnostics and telemetry are disabled by this project and its user-facing branding is replaced. See the source repositories for their respective licenses and attribution.

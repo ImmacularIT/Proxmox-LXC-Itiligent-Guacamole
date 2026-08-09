@@ -17,14 +17,215 @@ var_unprivileged="${var_unprivileged:-1}"
 PROJECT_OWNER="ImmacularIT"
 PROJECT_REPO="Proxmox-LXC-Itiligent-Guacamole"
 PROJECT_REF="${ITILIGENT_REPO_REF:-main}"
+PROJECT_DISPLAY_NAME="Itiligent Guacamole LXC"
 UPSTREAM_PROJECT_URL="https://github.com/itiligent/Easy-Guacamole-Installer"
 IMMACULARIT_PROFILE_URL="https://github.com/ImmacularIT"
 PROJECT_URL="https://github.com/${PROJECT_OWNER}/${PROJECT_REPO}"
+
+# The external Proxmox helper framework is retained only for its proven
+# container-creation mechanics. This project does not participate in its
+# diagnostics/telemetry service and does not expose its branding in dialogs.
+DIAGNOSTICS="no"
+export DIAGNOSTICS
+post_to_api() { return 0; }
+post_progress_to_api() { return 0; }
+post_update_to_api() { return 0; }
+telemetry_new_attempt() { return 0; }
+diagnostics_check() {
+  DIAGNOSTICS="no"
+  export DIAGNOSTICS
+  return 0
+}
+diagnostics_menu() { return 0; }
+
+# The framework has no project-specific header for this application. Avoid its
+# fallback network request (and the resulting unrelated URL warning) while
+# preserving header_info's normal clear-screen behavior.
+get_header() { return 0; }
+
+# Keep the established Default/Advanced framework dialogs and behavior, but
+# present them as part of this ImmacularIT installer rather than with unrelated
+# framework branding.
+whiptail() {
+  local arg
+  local -a rewritten=()
+  for arg in "$@"; do
+    arg="${arg//Proxmox VE Helper Scripts - ${APP}/ImmacularIT - ${APP}}"
+    arg="${arg//Proxmox VE Helper Scripts/ImmacularIT - ${APP}}"
+    arg="${arg//Community-Scripts Options/${APP} Options}"
+    arg="${arg//Community-Scripts SETTINGS Menu/${APP} Settings}"
+    rewritten+=("$arg")
+  done
+  command whiptail "${rewritten[@]}"
+}
+
+# Preserve the existing settings editor except for the diagnostics/telemetry
+# option, which is intentionally unsupported by this project. It is retained
+# only for explicit compatibility modes and is not shown by the normal launcher.
+settings_menu() {
+  local choice
+  while true; do
+    if [ -f "$(get_app_defaults_path)" ]; then
+      choice=$(whiptail \
+        --backtitle "ImmacularIT - ${APP}" \
+        --title "${APP} Settings" \
+        --ok-button "Select" --cancel-button "Exit Script" \
+        --menu "\nChoose a settings option:" 18 60 6 \
+        "1" "Edit Default.vars" \
+        "2" "Edit App.vars for ${APP}" \
+        "3" "Back to Main Menu" \
+        3>&1 1>&2 2>&3) || exit_script
+      case "$choice" in
+      1) ${EDITOR:-nano} /usr/local/community-scripts/default.vars ;;
+      2) ${EDITOR:-nano} "$(get_app_defaults_path)" ;;
+      3) return ;;
+      esac
+    else
+      choice=$(whiptail \
+        --backtitle "ImmacularIT - ${APP}" \
+        --title "${APP} Settings" \
+        --ok-button "Select" --cancel-button "Exit Script" \
+        --menu "\nChoose a settings option:" 16 60 5 \
+        "1" "Edit Default.vars" \
+        "2" "Back to Main Menu" \
+        3>&1 1>&2 2>&3) || exit_script
+      case "$choice" in
+      1) ${EDITOR:-nano} /usr/local/community-scripts/default.vars ;;
+      2) return ;;
+      esac
+    fi
+  done
+}
 
 header_info "$APP"
 variables
 color
 catch_errors
+
+# variables() belongs to the external framework and resets DIAGNOSTICS to its
+# own safe default. Reassert the project policy after initialization so neither
+# saved host preferences nor later framework changes can opt this installer in.
+DIAGNOSTICS="no"
+export DIAGNOSTICS
+
+show_project_welcome() {
+  whiptail \
+    --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
+    --title "WELCOME" \
+    --ok-button "Continue" --cancel-button "Exit" \
+    --msgbox "\n${PROJECT_DISPLAY_NAME}\n\nProxmox VE LXC adaptation of the Itiligent Easy Guacamole Installer, maintained by ImmacularIT.\n\nDefault container profile:\n  - Debian 13\n  - Unprivileged LXC\n  - 1 CPU / 2048 MiB RAM / 8 GB disk\n\nBefore container creation, the official Proxmox appliance catalog is refreshed. The current Debian 13 AMD64 image is downloaded automatically when missing or when the cached image is older.\n\nAfter the LXC is created, the original interactive Itiligent setup lets you choose the database, authentication extensions, Nginx, TLS and other Guacamole options.\n\nProxmox remains responsible for container identity, networking and firewall policy.\n\nPrivacy: this installer does not send telemetry or diagnostics." 29 78 || exit_script
+}
+
+select_project_install_mode() {
+  local requested_mode="${1:-}"
+  local choice
+
+  # The same ct script is also used by the in-container update path. Only show
+  # the installation UI on a Proxmox host, with an interactive terminal, and
+  # when no explicit framework mode was supplied by the caller.
+  command -v pveversion >/dev/null 2>&1 || return 0
+  [[ -n "${mode:-}" || -n "$requested_mode" ]] && return 0
+  if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
+    return 0
+  fi
+
+  ensure_whiptail
+  show_project_welcome
+
+  choice=$(whiptail \
+    --backtitle "ImmacularIT - ${PROJECT_DISPLAY_NAME}" \
+    --title "INSTALL OPTIONS" \
+    --ok-button "Select" --cancel-button "Exit Script" \
+    --menu "\nChoose an option:" 14 62 2 \
+    "Default Install" "" \
+    "Advanced Install" "" \
+    --default-item "Default Install" 3>&1 1>&2 2>&3) || exit_script
+
+  case "$choice" in
+  "Default Install") mode="default" ;;
+  "Advanced Install") mode="advanced" ;;
+  *) exit_script ;;
+  esac
+}
+
+prepare_latest_debian_template() {
+  # The retained framework normally prefers a cached template and can skip its
+  # catalog refresh when one is already present. For this project, make Debian
+  # 13 AMD64 freshness deterministic while leaving ARM64 handling unchanged.
+  command -v pveversion >/dev/null 2>&1 || return 0
+  [[ "$(dpkg --print-architecture 2>/dev/null || true)" == "amd64" ]] || return 0
+  [[ "${var_os:-debian}" == "debian" && "${var_version:-13}" == "13" ]] || return 0
+
+  local storage="${TEMPLATE_STORAGE:-${var_template_storage:-}}"
+  local available existing existing_name newest_name
+
+  if [[ -z "$storage" ]]; then
+    msg_error "No Proxmox template storage was selected before Debian template preparation"
+    exit 226
+  fi
+
+  msg_info "Refreshing the official Proxmox appliance catalog"
+  if ! pveam update >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+    msg_error "Failed to refresh the official Proxmox appliance catalog"
+    exit 226
+  fi
+  msg_ok "Official Proxmox appliance catalog refreshed"
+
+  available=$(pveam available --section system 2>/dev/null \
+    | awk '$2 ~ /^debian-13-standard_.*_amd64\.tar\.zst$/ {print $2}' \
+    | sort -V | tail -n1)
+  if [[ -z "$available" ]]; then
+    msg_error "No Debian 13 AMD64 standard template is available from the Proxmox appliance catalog"
+    exit 226
+  fi
+
+  existing=$(pveam list "$storage" 2>/dev/null \
+    | awk '$1 ~ /debian-13-standard_.*_amd64\.tar\.zst$/ {print $1}' \
+    | sed 's|.*/||' | sort -V | tail -n1)
+  existing_name="${existing##*/}"
+
+  if [[ -z "$existing_name" ]]; then
+    msg_info "No cached Debian 13 template found on ${storage}; downloading ${available}"
+    if ! pveam download "$storage" "$available" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+      msg_error "Failed to download Debian template ${available} to ${storage}"
+      exit 226
+    fi
+  elif [[ "$existing_name" == "$available" ]]; then
+    msg_ok "Current Debian template is already cached: ${available}"
+  else
+    newest_name=$(printf '%s\n%s\n' "$existing_name" "$available" | sort -V | tail -n1)
+    if [[ "$newest_name" == "$existing_name" ]]; then
+      msg_warn "Cached Debian template ${existing_name} is newer than catalog ${available}; keeping cached template"
+    else
+      msg_info "Newer Debian 13 template available (${existing_name} -> ${available}); downloading ${available}"
+      if ! pveam download "$storage" "$available" >>"${BUILD_LOG:-/dev/null}" 2>&1; then
+        msg_error "Failed to download Debian template ${available} to ${storage}"
+        exit 226
+      fi
+    fi
+  fi
+
+  if [[ "$newest_name" != "$existing_name" || -z "$existing_name" ]]; then
+    if ! pveam list "$storage" 2>/dev/null \
+      | awk -v wanted="vztmpl/${available}" '
+          length($1) >= length(wanted) && substr($1, length($1) - length(wanted) + 1) == wanted {found=1}
+          END {exit !found}
+        '; then
+      msg_error "Debian template ${available} is not available on ${storage} after download"
+      exit 226
+    fi
+  fi
+
+  TEMPLATE_STORAGE="$storage"
+  var_template_storage="$storage"
+  export TEMPLATE_STORAGE var_template_storage
+
+  if [[ -n "$existing_name" && "$newest_name" == "$existing_name" && "$existing_name" != "$available" ]]; then
+    msg_ok "Debian template ready: ${existing_name}"
+  else
+    msg_ok "Debian template ready: ${available}"
+  fi
+}
 
 function update_script() {
   header_info
@@ -88,6 +289,52 @@ configure_default_identity() {
   CTID="$requested_id"
   HN="$requested_hostname"
   export CT_ID CTID HN
+}
+
+configure_default_container_storage() {
+  [[ "${METHOD:-}" == "default" ]] || return 0
+  if [[ "${PHS_SILENT:-0}" == "1" || ! -t 0 || "${TERM:-dumb}" == "dumb" ]]; then
+    return 0
+  fi
+
+  local storage selected default_storage found=0
+  local -a stores=() storage_menu=()
+
+  mapfile -t stores < <(pvesm status --content rootdir 2>/dev/null | awk 'NR > 1 && $3 == "active" {print $1}')
+  if [[ ${#stores[@]} -eq 0 ]]; then
+    msg_error "No active Proxmox storage supports LXC root disks"
+    exit 116
+  fi
+
+  default_storage="${CONTAINER_STORAGE:-${var_container_storage:-${stores[0]}}}"
+  for storage in "${stores[@]}"; do
+    [[ "$storage" == "$default_storage" ]] && found=1
+  done
+  [[ "$found" -eq 1 ]] || default_storage="${stores[0]}"
+
+  for storage in "${stores[@]}"; do
+    if [[ "$storage" == "$default_storage" ]]; then
+      storage_menu+=("$storage" "Current default")
+    else
+      storage_menu+=("$storage" "Active container storage")
+    fi
+  done
+
+  selected=$(whiptail \
+    --backtitle "ImmacularIT - ${APP}" \
+    --title "DEFAULT INSTALL: STORAGE" \
+    --ok-button "Next" --cancel-button "Exit Script" \
+    --menu "\nSelect storage for the LXC root disk:" 18 72 10 \
+    "${storage_menu[@]}" \
+    --default-item "$default_storage" 3>&1 1>&2 2>&3) || exit_script
+
+  CONTAINER_STORAGE="$selected"
+  var_container_storage="$selected"
+  export CONTAINER_STORAGE var_container_storage
+
+  header_info
+  echo -e "${STORAGE}${BOLD}${DGN}Container Storage: ${BGN}${CONTAINER_STORAGE}${CL}"
+  echo
 }
 
 configure_default_network() {
@@ -230,11 +477,14 @@ EOF_DESCRIPTION
 }
 
 _PROJECT_INSTALL_URL="https://raw.githubusercontent.com/${PROJECT_OWNER}/${PROJECT_REPO}/${PROJECT_REF}/install/itiligent-guacamole-install.sh"
-_COMMUNITY_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
+_FRAMEWORK_INSTALL_URL="https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh"
 
+select_project_install_mode "${1:-}"
 start
 configure_default_identity
+configure_default_container_storage
 configure_default_network
+prepare_latest_debian_template
 configure_project_tags
 
 curl() {
@@ -242,7 +492,7 @@ curl() {
   local token="${GITHUB_TOKEN:-${var_github_token:-}}"
   local -a rewritten=()
   for arg in "$@"; do
-    if [[ "$arg" == "$_COMMUNITY_INSTALL_URL" ]]; then
+    if [[ "$arg" == "$_FRAMEWORK_INSTALL_URL" ]]; then
       rewritten+=("$_PROJECT_INSTALL_URL")
       project_fetch=1
     else
